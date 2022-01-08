@@ -71,7 +71,7 @@
 
 	function activeFlute()
 	{
-		return items.flute && canReachLightWorld();
+		return items.flute && (canReachLightWorld() || flags.invertedactivatedflute);
 	}
 	
 	function canSpinSpeed()
@@ -1281,7 +1281,9 @@
 					return window.GTBoss();			
 				},
 				can_get_chest: function() {
-					if ((crystalCheck() < 7 && crystalCheck() < flags.opentowercount) || !canReachLightWorld()) return 'unavailable';
+					if (!canReachLightWorld()) return 'unavailable';
+					if (flags.opentowercount == 8) return 'possible';
+					if (crystalCheck() < 7 && crystalCheck() < flags.opentowercount) return 'unavailable';										
 					var doorcheck = window.doorCheck(11,false,false,true,['glove'],'connector');
 					if(doorcheck)
 					{
@@ -1655,11 +1657,11 @@
 					//return canReachLightWorldBunny() ? (items.book ? (items.moonpearl ? 'available' : 'information') : 'information') : 'unavailable';
 					if(!canReachLightWorldBunny())
 						return 'unavailable';
-					if(!items.book || !items.moonpearl)
+					if(!items.book || (!items.moonpearl && flags.doorshuffle === 'N'))
 						return 'information';
 					var doorcheck = window.doorCheck(1,false,false,false,['glove',(!flags.wildkeys && flags.gametype != 'R') || !flags.wildbigkeys ? 'boots' : '','firesource'],'connector');
 					if(doorcheck)
-						return doorcheck;
+						return doorcheck === 'available' && !items.moonpearl ? 'possible' : doorcheck;
 					return 'available';
 				}
 			}, { // [49]
@@ -2074,7 +2076,11 @@
 					return window.GTBoss();
 				},
 				can_get_chest: function() {
-					if ((crystalCheck() < 7 && crystalCheck() < flags.opentowercount) || items.glove < 2 || (!items.hammer && !items.hookshot) || !canReachDarkWorld()) return 'unavailable';
+					if (items.glove < 2 || !items.hammer || (!items.hookshot && !items.mirror) || !canReachDarkWorld()) return 'unavailable';
+					if (flags.opentowercount == 8) {
+						return (items.lantern || items.flute) ? 'possible' : 'darkpossible';
+					}
+					if (crystalCheck() < 7 && crystalCheck() < flags.opentowercount) return 'unavailable';
 					var doorcheck = window.doorCheck(10,!items.flute && !items.lantern,false,false,['hammer','firerod','hookshot','boomerang','somaria','wizzrobe','boots','bow',flags.bossshuffle === 'N' ? '' : 'icerod'],'item');
 					if(doorcheck)
 						return doorcheck;
@@ -2167,11 +2173,11 @@
 				caption: 'Mimic Cave ({mirror} outside of Turtle Rock)(Yellow = {medallion0} unkown OR possible w/out {firerod})',
 				is_opened: false,
 				is_available: function() {
-					if (!items.moonpearl || !items.hammer || items.glove !== 2 || !items.somaria || !items.mirror) return 'unavailable';
+					if (!items.moonpearl || !items.hammer || items.glove !== 2 || (!items.somaria && flags.doorshuffle === 'N') || !items.mirror) return 'unavailable';
 					var state = medallionCheck(1);	
 					if (state) return state === 'possible' && !items.flute && !items.lantern ? 'darkpossible' : state;
-					
-					var doorcheck = window.doorCheck(9,!items.flute && !items.lantern,true,false,['firerod',(!flags.wildkeys && flags.gametype != 'R') || !flags.wildbigkeys ? 'laserbridge' : ''],'connector');
+
+					var doorcheck = window.doorCheck(9,!items.flute && !items.lantern,true,false,['somaria','firerod',(!flags.wildkeys && flags.gametype != 'R') || !flags.wildbigkeys ? 'laserbridge' : ''],'connector');
 					if(doorcheck)
 						return doorcheck;
 

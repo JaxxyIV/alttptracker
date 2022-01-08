@@ -32,7 +32,7 @@
     window.toggle = function(label) {
 		if(rightClickedLocation != -1)
 		{
-			name = getNiceName(label);
+			var name = getNiceName(label);
 			if(rightClickedType === "chest")
 			{
 				if(name.charAt(0) < 'a' || name.charAt(0) > 'z')
@@ -212,27 +212,57 @@
 		for (var k = 0; k < dungeons.length; k++) {
 			document.getElementById('chest'+k).style.backgroundColor = 'white';// (flags.entrancemode != 'N' ? getDungeonBackground(dungeons[k].can_get_chest()) : 'white');
 		}
+
+		if(doorWindow && !doorWindow.closed)
+			doorWindow.postMessage(cloneItems(),"*");
     };
 
 	window.receiveMessage = function(event)
 	{
 		if(window.origin === event.origin)
 		{
-			if(event.data == "UPDATE" && doorWindow)
+			if(event.data == "UPDATE" && doorWindow && !doorWindow.closed)
 				doorWindow.postMessage(dungeonData,"*");
 			else
-				if(event.data.dungeonPaths && event.data.dungeonPaths.length === 13)
-					dungeonData = event.data;
+				if(event.data == "ITEMS" && doorWindow && !doorWindow.closed)
+					doorWindow.postMessage(cloneItems(),"*");
+				else
+					if((""+event.data).startsWith("TOGGLE "))
+					{
+						let item = (""+event.data).substring(7);
+						if(items.hasOwnProperty(item))
+						{
+							click_map();
+							toggle(item);
+						}
+					}
+					else
+						if(event.data.dungeonPaths && event.data.dungeonPaths.length === 13)
+							dungeonData = event.data;
 		}
-	}
+	};
 
 	window.showDoorWindow = function()
 	{
 		if(doorWindow && !doorWindow.closed)
 			doorWindow.focus();
 		else
-			doorWindow = window.open('dungeontracker.html?door_shuffle='+flags.doorshuffle+'&wild_keys='+flags.wildkeys+'&wild_big_keys='+flags.wildbigkeys+'&world_state='+flags.gametype+(dungeonData ?'&request_update=true' :''),'','width=372,height=700,titlebar=0,menubar=0,toolbar=0,scrollbars=1,resizable=1');
-	}
+		{
+			var url = 'dungeontracker.html?door_shuffle='+flags.doorshuffle+'&overworld_shuffle='+flags.overworldshuffle;
+			url += '&wild_keys='+flags.wildkeys+'&wild_big_keys='+flags.wildbigkeys+'&world_state='+flags.gametype;
+			url += '&entrance_shuffle='+flags.entrancemode+(dungeonData ?'&request_update=true' :'');
+			doorWindow = window.open(url,'','width=444,height=700,titlebar=0,menubar=0,toolbar=0,scrollbars=1,resizable=1');
+		}
+	};
+
+	window.cloneItems = function()
+	{
+		var newItems = Object.assign({},items);
+		newItems.inc = newItems.dec = null;
+		newItems.connectorOne = connectorOne;
+		newItems.connectorTwo = connectorTwo;
+		return newItems;
+	};
 
 	window.getDungeonBackground = function(x) {
 		switch (x) {
@@ -255,7 +285,7 @@
 				return 'purple';
 				break;
 		}
-	}
+	};
 	
     // event of clicking on a boss's pendant/crystal subsquare
     window.toggle_dungeon = function(n) {
@@ -411,7 +441,7 @@
     window.toggle_bomb_floor = function() {
 		if(rightClickedLocation != -1)
 		{
-			name = "TT Bomb Floor";
+			var name = "TT Bomb Floor";
 			if(rightClickedType === "chest")
 			{
 				if(!chests[rightClickedLocation].content)
@@ -966,10 +996,12 @@
         window.highlight = function(x) {
             document.getElementById('locationMap'+x).classList.add('highlight');
             document.getElementById('caption').innerHTML = caption_to_html(chests[x].content ?(chests[x].content+" | "+chests[x].caption) :chests[x].caption);
+			document.getElementById('autotrackingstatus').style.display = 'none';
         };
         window.unhighlight = function(x) {
             document.getElementById('locationMap'+x).classList.remove('highlight');
             document.getElementById('caption').innerHTML = '&nbsp;';
+			document.getElementById('autotrackingstatus').style.display = '';
         };
         // Highlights a entrance location and shows the caption
         window.highlight_entrance = function(x) {
@@ -992,27 +1024,33 @@
 				displayCaption = displayCaption + ' ['+entrances[x].note+']';
 			}
 			document.getElementById('caption').innerHTML = caption_to_html(displayCaption);
+			document.getElementById('autotrackingstatus').style.display = 'none';
         };
         window.unhighlight_entrance = function(x) {
             document.getElementById('entranceMap'+x).classList.remove('highlight');
             document.getElementById('caption').innerHTML = '&nbsp;';
+			document.getElementById('autotrackingstatus').style.display = '';
         };
         // Highlights a chest location and shows the caption (but for dungeons)
         window.highlight_dungeon = function(x) {
             document.getElementById('dungeon'+x).classList.add('highlight');
             document.getElementById('caption').innerHTML = caption_to_html((dungeons[x].content ? (dungeons[x].content+" | ") : "")+(dungeons[x].trashContent ? (dungeons[x].trashContent+" | ") : "")+dungeons[x].caption);
+			document.getElementById('autotrackingstatus').style.display = 'none';
         };
         window.unhighlight_dungeon = function(x) {
             document.getElementById('dungeon'+x).classList.remove('highlight');
             document.getElementById('caption').innerHTML = '&nbsp;';
+			document.getElementById('autotrackingstatus').style.display = '';
         };
         window.highlight_agahnim = function() {
             document.getElementById('castle').classList.add('highlight');
             document.getElementById('caption').innerHTML = caption_to_html(agahnim.caption);
+			document.getElementById('autotrackingstatus').style.display = 'none';
         };
         window.unhighlight_agahnim = function() {
             document.getElementById('castle').classList.remove('highlight');
             document.getElementById('caption').innerHTML = '&nbsp;';
+			document.getElementById('autotrackingstatus').style.display = '';
         };
     //}
 
@@ -1356,7 +1394,7 @@
 	
 	window.updateMapTracker = function() {
 		click_map();
-		toggle('moonpearl');
+		items.moonpearl = !items.moonpearl;
 		toggle('moonpearl');
 	}
 
@@ -1372,6 +1410,7 @@
 		document.getElementById("shuffledbigkeys").checked = (flags.wildbigkeys ? true : false);
 		document.getElementById("goalselect").value = flags.goals;
 		document.getElementById("swordselect").value = flags.swordmode;
+		document.getElementById("invertedactivatedflute").checked = (flags.invertedactivatedflute ? true : false);
 		
 		$('#flagsModal').show();
 	}
@@ -2027,6 +2066,11 @@
 			flags.swordmode = document.getElementById('swordselect').value;
 		}
 		
+		//Inverted Activated Flute
+		if (document.getElementById('invertedactivatedflute').checked != flags.invertedactivatedflute) {
+			flags.invertedactivatedflute = document.getElementById('invertedactivatedflute').checked;
+		}		
+		
 		//Entrance
 		if (document.getElementById('entranceselect').value != flags.entrancemode || adjustForEntrance) {
 			var currentURL = window.location.href;
@@ -2039,9 +2083,9 @@
 				}
 			}
 			
-			var fParam = currentURL.substr(currentURL.indexOf("f=") + 2, 27);
+			var fParam = currentURL.substr(currentURL.indexOf("f=") + 2, 29);
 			
-			var replaceParam = flags.gametype + document.getElementById('entranceselect').value + flags.bossshuffle + flags.enemyshuffle + flags.glitches + flags.itemplacement + flags.goals + flags.opentower + flags.opentowercount + flags.ganonvuln + flags.ganonvulncount + flags.swordmode + flags.mapmode + flags.spoilermode + flags.spheresmode + 'Y' + 'N' + (flags.wildmaps ? '1' : '0') + (flags.wildcompasses ? '1' : '0') + (flags.wildkeys ? '1' : '0') + (flags.wildbigkeys ? '1' : '0') + flags.ambrosia + flags.autotracking + flags.trackingport;
+			var replaceParam = flags.gametype + document.getElementById('entranceselect').value + flags.bossshuffle + flags.enemyshuffle + flags.glitches + flags.itemplacement + flags.goals + flags.opentower + flags.opentowercount + flags.ganonvuln + flags.ganonvulncount + flags.swordmode + (flags.invertedactivatedflute ? '1' : '0') + flags.mapmode + flags.spoilermode + flags.spheresmode + 'Y' + 'N' + (flags.wildmaps ? '1' : '0') + (flags.wildcompasses ? '1' : '0') + (flags.wildkeys ? '1' : '0') + (flags.wildbigkeys ? '1' : '0') + flags.ambrosia + flags.overworldshuffle + flags.autotracking + flags.trackingport;
 
 			currentURL = currentURL.replace(fParam, replaceParam);
 			
@@ -2579,8 +2623,11 @@
 		}
 		
 		if (flags.doorshuffle === 'N') {
-			document.getElementById('showpathsdiv').style.visibility = 'hidden';
 			document.getElementById('mirrorscroll').style.visibility = 'hidden';
+		}
+		
+		if (flags.doorshuffle === 'N' && flags.overworldshuffle === 'N') {
+			document.getElementById('showpathsdiv').style.visibility = 'hidden';
 		}
 		else
 			window.addEventListener("message", receiveMessage, false);
@@ -2600,6 +2647,18 @@
 		//If starting boots
 		if (window.startingitems.charAt(0) === 'Y') {
 			toggle('boots');
+		}
+		
+		if (window.startingitems.charAt(1) === 'Y') {
+			toggle('flute');
+		}
+		
+		if (window.startingitems.charAt(2) === 'Y') {
+			toggle('hookshot');
+		}
+		
+		if (window.startingitems.charAt(3) === 'Y') {
+			toggle('icerod');
 		}
 		
 		if (flags.autotracking === 'Y') {

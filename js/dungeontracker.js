@@ -5,13 +5,40 @@
 	window.lobbyshuffle = true;
 	window.excludesmallkeys = true;
 	window.excludebigkeys = true;
+	window.owshuffle = 'N';
+	window.crossedow = false;
+	window.similarow = false;
+	window.mixedow = false;
+	window.fluteshuffle = false;
+	window.worldState = 'O';
+	window.entranceEnabled = false;
 
-	let currentDungeon,currentPath = null,clickedPathIndex,currentlyEditing = false,editingIndex,globalHasBranch = false;
+	let outstandingUpdate = false,currentDungeon = -1,currentPath = null,clickedPathIndex,currentlyEditing = false,editingIndex,globalHasBranch = false,visibleSidebar = true;
+	let ownItems = {},reachableEdges = null,currentOWPath = null,currentOWScreen = null,fullOverworldMode = null,fullOWFixedEdge = null,fullOWSelectedScreen = null,fullOWSelectedEdge = null,fullOWConnectorStart = null,fullOWConnectorEnd = null,extraOWScreen = null,extraOWDirection = null,lastUnknownConnectorIndex = -1;
+	let searchResults = new Map(),searchRegion = null,searchStartScreen = null,searchRegionChoiceVisible = false,clickedOverworldPathIndex,clickedOverworldPathListName,clickedOverworldPath = null,clickedConnectorIndex,drawDarkWorld = false,sideBySide = false,fullZoom = .8,fullZoomAuto = true;
 	window.dungeonPaths = [];
+	window.entranceConnectors = [];
+	window.fixedStartRegions = [];
+	window.customStartRegions = [];
+	window.customFluteSpots = [0x30];
+	window.pinnedPaths = [];
+	window.previousPaths = [];
 
-	const dungeonNamesLong = ["Eastern Palace", "Desert Palace", "Tower of Hera", "Palace of Darkness", "Swamp Palace", "Skull Woods", "Thieves' Town", "Ice Palace", "Misery Mire", "Turtle Rock", "Ganon's Tower", "Hyrule Castle", "Castle Tower"];
-	const dungeonNamesShort = ["EP", "DP", "ToH", "PoD", "SP", "SW", "TT", "IP", "MM", "TR", "GT", "HC", "CT"];
+	const dungeonNamesLong = ["Eastern Palace","Desert Palace","Tower of Hera","Palace of Darkness","Swamp Palace","Skull Woods","Thieves' Town","Ice Palace","Misery Mire","Turtle Rock","Ganon's Tower","Hyrule Castle","Castle Tower"];
+	const dungeonNamesShort = ["EP","DP","ToH","PoD","SP","SW","TT","IP","MM","TR","GT","HC","CT"];
+	const checkboxFlags = ["showmorerooms","splitpath","owsidebaredit","owsidebarnew","owsidebarsearch","itemsync","activeflutebox","connectorsync","pinnedlinkshouse","pinnedsanctuary","pinnedoldman","pinnedpyramid","compactpinned","compactprevious","alwaysfollowmarked","compactsearchresults","sidebysideow","zoomautoow","owsearchincludecommon"];
+	const fullOWTitle = {"newpath":"Start a new path","continuepath":"Where does this transition lead to?","searchpath":"Select a target screen","searchpathtarget":"Select a new target screen","searchpathstart":"Select a starting screen","editedges":"Click on a transition or screen","editflutespots":"Click on a screen to place a flute spot"};
 
+	window.overworldScreens = new Map();
+	window.screenLinksGlobal = [];
+	window.screenLinksLayout = [];
+	window.screenLinksEntrance = [];
+	window.entranceIndexToRegion = {};
+	window.overworldEdgeToDirection = {};
+	window.checkableScreens = new Set();
+	window.maybeCheckableScreens = new Set();
+	window.continueRegions = new Map();
+	window.emptyMap = new Map();
 	window.dungeonEntrances = [];
 	window.lobbyEntrances = [];
 	window.lobbySanctuary = null;
@@ -23,70 +50,84 @@
 	window.directions = [];
 	window.objects = [];
 	window.switchobjects = [];
-	window.items = [];
+	window.itemicons = [];
 	window.bosses = [];
 	window.symbolMap = [];
 
 	window.loadOverview = function()
 	{
+		currentDungeon = -1;
 		loadDungeonSummaries();
 		updateStatistics();
-		if(document.getElementById("pathlist").style.display != "none" || document.getElementById("pathedit").style.display != "none")
-			switchScene('overview');
+		if(document.getElementById("pathlist").style.display != "none" || document.getElementById("pathedit").style.display != "none" || document.getElementById("owmain").style.display != "none" || document.getElementById("owpathedit").style.display != "none" || document.getElementById("owsearch").style.display != "none")
+			switchScene("overview");
 	};
 
 	window.loadDungeonSummaries = function()
 	{
-		for(let k = 0; k < 13; k++)
+		for(let n = 0; n < 13; n++)
+			loadDungeonSummary(n);
+	};
+
+	window.loadDungeonSummary = function(n)
+	{
+		if(dungeonPaths[n].completed)
 		{
-			if(dungeonPaths[k].completed)
+			document.getElementById("boss"+n).classList.add("completed");
+			document.getElementById("summary"+n).innerHTML = "<div class='symbolnode' style='background-image: url("+"./images/dungeons/keychest0.png); left: 16px;'></div>";
+			if(visibleSidebar)
+				document.getElementById("sidesummary"+n).innerHTML = "<div class='symbolnode' style='background-image: url("+"./images/dungeons/keychest0.png);'></div>";
+		}
+		else
+		{
+			document.getElementById("boss"+n).classList.remove("completed");
+			let s = "",side = "",items = [];
+			for(let path of dungeonPaths[n].paths)
 			{
-				document.getElementById("boss"+k).classList.add("completed");
-				document.getElementById("summary"+k).innerHTML = "<div class='symbolnode' style='background-image: url("+"./images/dungeons/keychest0.png); left: 16px;'></div>";
+				for(let l = 0; l < path.length-1; l += 2)
+				{
+					if(path[l] === 'i' || path[l] === 'b')
+					{
+						let id = path.substring(l,l+2);
+						if((excludesmallkeys && id === "i0") || (excludebigkeys && id === "i1"))
+							continue;
+						if(!items.includes(id))
+							items.push(id);
+					}
+				}
+			}
+			if(items.length <= 2)
+			{
+				for(let l = 0; l < items.length; l++)
+					s += createSymbolNode(symbolMap[items[l]],l*32,0);
 			}
 			else
-			{
-				document.getElementById("boss"+k).classList.remove("completed");
-				let s = "",items = [];
-				for(let path of dungeonPaths[k].paths)
+				if(items.length <= 5)
 				{
-					for(let l = 0; l < path.length-1; l += 2)
-					{
-						if(path[l] === 'i' || path[l] === 'b')
-						{
-							let id = path.substring(l,l+2);
-							if((excludesmallkeys && id === "i0") || (excludebigkeys && id === "i1"))
-								continue;
-							if(!items.includes(id))
-								items.push(id);
-						}
-					}
-				}
-				if(items.length <= 2)
-				{
-					for(let l = 0; l < items.length; l++)
-						s += createSymbolNode(symbolMap[items[l]],l*32,0);
+					s += createSymbolNode(symbolMap[items[0]],0,0);
+					for(let l = 1; l < 3; l++)
+						s += createSymbolNode(symbolMap[items[l]],(l+1)*16,0,true);
+					for(let l = 3; l < items.length; l++)
+						s += createSymbolNode(symbolMap[items[l]],(l-1)*16,16,true);
 				}
 				else
-					if(items.length <= 5)
-					{
-						s += createSymbolNode(symbolMap[items[0]],0,0);
-						for(let l = 1; l < 3; l++)
-							s += createSymbolNode(symbolMap[items[l]],(l+1)*16,0,true);
-						for(let l = 3; l < items.length; l++)
-							s += createSymbolNode(symbolMap[items[l]],(l-1)*16,16,true);
-					}
-					else
-					{
-						for(let l = 0; l < 4; l++)
-							s += createSymbolNode(symbolMap[items[l]],l*16,0,true);
-						for(let l = 4; l < Math.min(items.length,8); l++)
-							s += createSymbolNode(symbolMap[items[l]],(l-4)*16,16,true);
-					}
-				document.getElementById("summary"+k).innerHTML = s;
+				{
+					for(let l = 0; l < 4; l++)
+						s += createSymbolNode(symbolMap[items[l]],l*16,0,true);
+					for(let l = 4; l < Math.min(items.length,8); l++)
+						s += createSymbolNode(symbolMap[items[l]],(l-4)*16,16,true);
+				}
+			document.getElementById("summary"+n).innerHTML = s;
+			if(visibleSidebar)
+			{
+				for(let l = 0; l < Math.min(items.length,2); l++)
+					side += createSymbolNode(symbolMap[items[l]],l*16,0,true);
+				for(let l = 2; l < Math.min(items.length,4); l++)
+					side += createSymbolNode(symbolMap[items[l]],(l-2)*16,16,true);
+				document.getElementById("sidesummary"+n).innerHTML = side;
 			}
 		}
-	};
+	}
 
 	window.loadDungeon = function(n)
 	{
@@ -101,7 +142,30 @@
 			document.getElementById("completedbutton").classList.add("pointer");
 		updatePathList();
 		document.getElementById("dungeonpathsnote").value = dungeonPaths[n].notes;
-		window.switchScene("pathlist");
+		document.getElementById("sidebossow").classList.remove("activetab");
+		document.getElementById("sidesummaryow").classList.remove("activetab");
+		for(let k = 0; k < 13; k++)
+			if(k == n)
+			{
+				document.getElementById("sideboss"+k).classList.add("activetab");
+				document.getElementById("sidesummary"+k).classList.add("activetab");
+			}
+			else
+			{
+				document.getElementById("sideboss"+k).classList.remove("activetab");
+				document.getElementById("sidesummary"+k).classList.remove("activetab");
+			}
+		if(outstandingUpdate)
+			sendUpdate();
+		switchScene("pathlist");
+	};
+
+	window.sideLoadDungeon = function(n)
+	{
+		currentPath = null;
+		if(currentDungeon != -1)
+			saveNotes();
+		window.loadDungeon(n);
 	};
 
 	window.updateStartRooms = function()
@@ -143,13 +207,18 @@
 
 	window.closeDungeon = function()
 	{
+		saveNotes();
+		loadOverview();
+	};
+
+	window.saveNotes = function()
+	{
 		let notes = document.getElementById("dungeonpathsnote").value;
 		if(notes != dungeonPaths[currentDungeon].notes)
 		{
 			dungeonPaths[currentDungeon].notes = notes;
 			sendUpdate();
 		}
-		loadOverview();
 	};
 
 	window.markCompleted = function()
@@ -160,10 +229,12 @@
 			document.getElementById("dungeonicon").classList.remove("completed");
 			document.getElementById("completedbutton").innerHTML = "Mark dungeon completed";
 			document.getElementById("completedbutton").classList.add("pointer");
+			loadDungeonSummary(currentDungeon);
 		}
 		else
 		{
 			dungeonPaths[currentDungeon].completed = true;
+			saveNotes();
 			loadOverview();
 		}
 		sendUpdate();
@@ -208,7 +279,7 @@
 			}
 		}
 		let onClick = clickAction === "startPath" ?"startPath(\""+room.id+"\")" :(clickAction === "append" ?"appendToPath(\""+room.id+"\"); hideRoomModal()" :"");
-		return "<div class='"+classes+"' onClick='"+onClick+"'"+(left ?" style='left: "+left+"px;'" :"")+"><img class='roomnodeimg' src='./images/dungeons/"+file+".png' style='transform: scale("+scale+") translateX(-"+x+"px) translateY(-"+y+"px);'><span class='roomtt'><label class='ttlabel'>"+name+"</label></span></div>";
+		return "<div class='"+classes+"' onclick='"+onClick+"'"+(left ?" style='left: "+left+"px;'" :"")+"><img class='roomnodeimg' src='./images/dungeons/"+file+".png' style='transform: scale("+scale+") translateX(-"+x+"px) translateY(-"+y+"px);'><span class='roomtt'><label class='ttlabel'>"+name+"</label></span></div>";
 	};
 
 	window.createSymbolNode = function(symbol,left,top,small = false)
@@ -307,6 +378,7 @@
 			document.getElementById("dungeonpaths2").childNodes[editingIndex].classList.add("editing");
 		}
 		document.getElementById(currentPath === null ?"dungeonpaths" :"dungeonpaths2").childNodes[0].classList.add("newpath");
+		loadDungeonSummary(currentDungeon);
 		hideClickPathModal();
 		sendUpdate();
 	};
@@ -329,6 +401,7 @@
 			document.getElementById("dungeonpaths2").childNodes[editingIndex].classList.add("editing");
 		}
 		document.getElementById(currentPath === null ?"dungeonpaths" :"dungeonpaths2").childNodes[dungeonPaths[currentDungeon].paths.length-1].classList.add("newpath");
+		loadDungeonSummary(currentDungeon);
 		hideClickPathModal();
 		sendUpdate();
 	};
@@ -349,6 +422,7 @@
 				document.getElementById("dungeonpaths2").childNodes[editingIndex].classList.add("editing");
 			}
 		}
+		loadDungeonSummary(currentDungeon);
 		sendUpdate();
 	};
 
@@ -371,7 +445,7 @@
 			else
 				pathNodes[k].classList.remove("editing");
 		drawAllSymbols();
-		window.switchScene("pathedit");
+		switchScene("pathedit");
 	};
 
 	window.appendToPath = function(id)
@@ -414,7 +488,7 @@
 		updateStartRooms();
 		for(let path of document.getElementById("dungeonpaths").childNodes)
 			path.classList.remove("newpath");
-		switchScene('pathlist');
+		switchScene("pathlist");
 		currentPath = null;
 	};
 
@@ -427,8 +501,9 @@
 		updateStartRooms();
 		updatePathList();
 		document.getElementById("dungeonpaths").childNodes[currentlyEditing ?editingIndex :0].classList.add("newpath");
-		switchScene('pathlist');
+		switchScene("pathlist");
 		currentPath = null;
+		loadDungeonSummary(currentDungeon);
 		sendUpdate();
 	};
 
@@ -454,6 +529,7 @@
 				document.getElementById("forkbutton").classList.remove("disabled");
 				if(!globalHasBranch)
 					document.getElementById("forkbutton").classList.add("disabled");
+				loadDungeonSummary(currentDungeon);
 				sendUpdate();
 				return;
 			}
@@ -487,7 +563,7 @@
 		document.getElementById("dungeonpaths2header").innerHTML = "Existing paths ("+dungeonPaths[currentDungeon].paths.length+")";
 		let s = "";
 		for(let k = 0; k < dungeonPaths[currentDungeon].paths.length; k++)
-			s += '<div class="row path" style="margin: 2px 0px;" onClick="showClickPathModal('+k+')">'+drawPath(dungeonPaths[currentDungeon].paths[k],false)+'</div>';
+			s += '<div class="row path" style="margin: 2px 0px;" onclick="showClickPathModal(event,'+k+')">'+drawPath(dungeonPaths[currentDungeon].paths[k],false)+'</div>';
 		document.getElementById("dungeonpaths").innerHTML = s;
 		document.getElementById("dungeonpaths2").innerHTML = s;
 	};
@@ -497,7 +573,7 @@
 		drawSymbols(directions,"directionicons",'d');
 		drawSymbols(objects,"objecticons",'o');
 		drawSymbols(switchobjects,"switchicons",'s');
-		drawSymbols(items,"itemicons",'i');
+		drawSymbols(itemicons,"itemicons",'i');
 		drawSymbols(bosses,"bossicons",'b');
 	};
 
@@ -514,7 +590,7 @@
 				style += " transform: rotate("+list[k].rotate+"deg);";
 			if(key === 'd')
 				style += " position: absolute; left: "+list[k].x+"px; top: "+list[k].y+"px;";
-			s += "<div class='pathsymbol' style='"+style+"' onClick='appendToPath(\""+id+"\")'></div>";
+			s += "<div class='pathsymbol' style='"+style+"' onclick='appendToPath(\""+id+"\")'></div>";
 		}
 		document.getElementById(elementID).innerHTML = s;
 	};
@@ -524,26 +600,72 @@
 		document.getElementById("overview").style.display = scene === "overview" ?"block" :"none";
 		document.getElementById("pathlist").style.display = scene === "pathlist" ?"block" :"none";
 		document.getElementById("pathedit").style.display = scene === "pathedit" ?"block" :"none";
+		document.getElementById("owmain").style.display = scene === "owmain" ?"block" :"none";
+		document.getElementById("owpathedit").style.display = scene === "owpathedit" ?"block" :"none";
+		document.getElementById("owsearch").style.display = scene === "owsearch" ?"block" :"none";
 		window.scrollTo(0,0);
+		if(scene === "overview")
+		{
+			document.getElementById("homebutton").classList.add("activetab");
+			document.getElementById("sidebossow").classList.remove("activetab");
+			document.getElementById("sidesummaryow").classList.remove("activetab");
+			for(let k = 0; k < 13; k++)
+			{
+				document.getElementById("sideboss"+k).classList.remove("activetab");
+				document.getElementById("sidesummary"+k).classList.remove("activetab");
+			}
+		}
+		else
+			document.getElementById("homebutton").classList.remove("activetab");
 	};
 
 	window.sendUpdate = function()
 	{
+		outstandingUpdate = false;
+		let data = allData();
 		try
 		{
-			saveAuto();
+			saveAuto(data);
 		}
 		catch(error)
 		{
 		}
 		if(window.opener && !window.opener.closed)
-			window.opener.postMessage(allData(),"*");
+			window.opener.postMessage(data,"*");
 	};
 
-	window.showClickPathModal = function(index)
+	window.home = function()
+	{
+		currentPath = currentOWPath = null;
+		if(currentDungeon != -1)
+		{
+			saveNotes();
+			currentDungeon = -1;
+		}
+		if(outstandingUpdate)
+			sendUpdate();
+		loadOverview();
+	};
+
+	window.showSidebar = function()
+	{
+		visibleSidebar = true;
+		loadDungeonSummaries();
+		document.getElementById("app").classList.add("showsidebar");
+	};
+
+	window.hideSidebar = function()
+	{
+		document.getElementById("app").classList.remove("showsidebar");
+		visibleSidebar = false;
+	};
+
+	window.showClickPathModal = function(event,index)
 	{
 		clickedPathIndex = index;
 		document.getElementById("currentclickedpath").innerHTML = drawPath(dungeonPaths[currentDungeon].paths[index],true);
+		document.getElementById("clickPathModalMain").style.left = (visibleSidebar ?"64" :"4")+"px";
+		document.getElementById("clickPathModalMain").style.top = Math.min(event.clientY-20,window.innerHeight-64-48)+"px";
 		document.getElementById("forkbutton2").classList.remove("disabled");
 		if(!globalHasBranch)
 			document.getElementById("forkbutton2").classList.add("disabled");
@@ -597,7 +719,8 @@
 				default:
 					starts += createRoomNode(lobbyEntrances[0],showDungeonName,clickAction);
 			}
-			starts += createRoomNode(lobbySanctuary,showDungeonName,clickAction);
+			if((doorshuffle !== 'C' || worldState !== 'I') && (currentDungeon === 11 || (doorshuffle === 'C' && worldState !== 'S')))
+				starts += createRoomNode(lobbySanctuary,showDungeonName,clickAction);
 		}
 		else
 		{
@@ -629,6 +752,7 @@
 	{
 		doorshuffle = document.getElementById("selectdoorshuffle").value[0];
 		lobbyshuffle = document.getElementById("lobbyshuffle").checked;
+		updateOverviewElements();
 	};
 
 	window.updateKeys = function()
@@ -638,9 +762,150 @@
 		loadDungeonSummaries();
 	};
 
+	window.updateOverworldShuffle = function(showVanillaOWBox)
+	{
+		owshuffle = document.getElementById("selectowshuffle").value[0];
+		crossedow = document.getElementById("crossedow").checked;
+		similarow = document.getElementById("similarow").checked;
+		mixedow = document.getElementById("mixedow").checked;
+		fluteshuffle = document.getElementById("fluteshuffle").checked;
+		worldState = document.getElementById("selectworldstate").value[0];
+		entranceEnabled = document.getElementById("entranceenabled").checked;
+		if(owshuffle === 'N' && !crossedow && !mixedow)
+			document.getElementById("overworldoptionsfinalbox").style.display = "none";
+		else
+			if(showVanillaOWBox)
+				document.getElementById("overworldoptionsfinalbox").style.display = "block";
+		updateOverviewElements();
+		updateReachableEdges();
+	};
+
+	window.updateSidebarElements = function()
+	{
+		document.getElementById("sidebaredit").style.display = document.getElementById("owsidebaredit").checked ?"block" :"none";
+		document.getElementById("sidebarnew").style.display = owshuffle !== 'N' && document.getElementById("owsidebarnew").checked ?"block" :"none";
+		document.getElementById("sidebarsearch").style.display = document.getElementById("owsidebarsearch").checked ?"block" :"none";
+	};
+
+	window.updateOverviewElements = function()
+	{
+		let noOverworld = owshuffle === 'N' && !crossedow && !mixedow && !fluteshuffle;
+		document.getElementById("overviewtitle").innerHTML = doorshuffle === 'N' ?(noOverworld ?"Please select a mode" :"Overworld Tracker") :(noOverworld ?"Dungeon Tracker" :"Overworld and Dungeon Tracker");
+		document.getElementById("overviewoverworld").style.display = noOverworld ?"none" :"block";
+		document.getElementById("overviewownewpath").style.display = owshuffle === 'N' ?"none" :"block";
+		document.getElementById("overviewdungeons").style.display = doorshuffle === 'N' ?"none" :"block";
+		document.getElementById("dungeonoptions").style.display = doorshuffle === 'N' ?"none" :"block";
+		document.getElementById("dungeonstats").style.display = doorshuffle === 'N' ?"none" :"block";
+		document.getElementById("sidebaroverworld").style.display = noOverworld ?"none" :"block";
+		document.getElementById("sidebardungeons").style.display = doorshuffle === 'N' ?"none" :"block";
+		updateSidebarElements();
+	};
+
+	window.updateItemSync = function()
+	{
+		if(document.getElementById("itemsync").checked && window.opener && !window.opener.closed)
+			window.opener.postMessage("ITEMS","*");
+	};
+
+	window.updateConnectorSync = function()
+	{
+		if(document.getElementById("connectorsync").checked && window.opener && !window.opener.closed)
+			window.opener.postMessage("ITEMS","*");
+		updateConnectorList();
+	};
+
+	window.receiveItemUpdate = function(newItems)
+	{
+		let changed = false;
+		if(document.getElementById("itemsync").checked)
+		{
+			for(let item of ["moonpearl","hammer","hookshot","flippers","mirror","flute","boots","book","lantern","agahnim"])
+			{
+				let newItem = !!newItems[item];
+				if(ownItems[item] !== newItem)
+				{
+					ownItems[item] = newItem;
+					changed = true;
+				}
+			}
+			if(!newItems.glove)
+			{
+				if(ownItems.gloves || ownItems.mitts)
+				{
+					ownItems.gloves = ownItems.mitts = false;
+					changed = true;
+				}
+			}
+			else
+				if(newItems.glove === 1)
+				{
+					if(!ownItems.gloves || ownItems.mitts)
+					{
+						ownItems.gloves = true;
+						ownItems.mitts = false;
+						changed = true;
+					}
+				}
+				else
+					if(!ownItems.gloves || !ownItems.mitts)
+					{
+						ownItems.gloves = ownItems.mitts = true;
+						changed = true;
+					}
+		}
+		if(document.getElementById("connectorsync").checked)
+		{
+			let keepConnectors = new Set(),createConnectors = [];
+			for(let k = 0; k < newItems.connectorOne.length; k++)
+			{
+				let id = newItems.connectorOne[k]+"|"+newItems.connectorTwo[k],createNew = true;
+				for(let l = 0; l < entranceConnectors.length; l++)
+				{
+					if(entranceConnectors[l].id === id)
+					{
+						keepConnectors.add(entranceConnectors[l]);
+						createNew = false;
+						break;
+					}
+				}
+				if(createNew)
+				{
+					createConnectors.push([newItems.connectorOne[k],newItems.connectorTwo[k],id]);
+					changed = true;
+				}
+			}
+			let deleted = false;
+			for(let connector of entranceConnectors)
+				if(!keepConnectors.has(connector))
+				{
+					deleted = changed = true;
+				}
+			if(deleted)
+			{
+				clearEntranceConnectors();
+				for(let c of keepConnectors)
+				{
+					let [screenID1,regionName1,screenID2,regionName2] = c.data;
+					createEntranceConnector(overworldScreens.get(screenID1).regions.get(regionName1),overworldScreens.get(screenID2).regions.get(regionName2),c.status,c.id);
+				}
+			}
+			for(let c of createConnectors)
+				createEntranceConnector(getEntranceRegionFromIndex(c[0]),getEntranceRegionFromIndex(c[1]),"unknown",c[2]);
+		}
+		if(changed)
+		{
+			outstandingUpdate = true;
+			updateReachableEdges();
+			updateItemTracker();
+			updateConnectorList();
+			if(document.getElementById("fullowModal").style.display === "block")
+				drawFullOverworldPanel();
+		}
+	};
+
 	window.keyDown = function(event)
 	{
-		if(event.target.tagName != "INPUT" && [32, 33, 34, 35, 36, 38, 40].indexOf(event.keyCode) != -1)
+		if((event.target.tagName != "INPUT" || event.target.type != "text") && [32,33,34,35,36,38,40].indexOf(event.keyCode) != -1)
 			event.preventDefault();
 	};
 
@@ -651,10 +916,17 @@
 			if(event.data.dungeonPaths && event.data.dungeonPaths.length === 13)
 			{
 				if(loadAll(event.data))
+				{
 					loadOverview();
+					if(document.getElementById("itemsync").checked || document.getElementById("connectorsync").checked)
+						window.opener.postMessage("ITEMS","*");
+				}
 				else
 					console.log("Error while loading data from main tracker");
 			}
+			else
+				if(!isNaN(event.data.tunic))
+					receiveItemUpdate(event.data);
 		}
 	};
 
@@ -662,12 +934,40 @@
 	{
 		let all = {};
 		all.dungeonPaths = dungeonPaths;
+		all.overworldTransitions = [];
+		all.mixedStates = [];
+		for(let [id,screen] of overworldScreens)
+		{
+			for(let [edgeString,edge] of screen.edges)
+				if(edge.out)
+					all.overworldTransitions.push([id,edgeString,edge.out.screen.id,edge.out.string]);
+			if(id < 0x40 || id >= 0x80)
+				all.mixedStates.push([id,screen.mixedState]);
+		}
+		all.items = ownItems;
+		all.entranceConnectors = entranceConnectors;
+		all.overworldNotes = document.getElementById("owpathsnote").value;
+		all.customStartRegions = [];
+		for(let region of customStartRegions)
+			all.customStartRegions.push([region.screen.id,region.name]);
+		all.customFluteSpots = customFluteSpots;
+		all.pinnedPaths = pinnedPaths;
+		all.previousPaths = previousPaths;
 		all.doorshuffle = doorshuffle;
 		all.lobbyshuffle = lobbyshuffle;
 		all.excludesmallkeys = excludesmallkeys;
 		all.excludebigkeys = excludebigkeys;
-		all.showmorerooms = document.getElementById("showmorerooms").checked;
-		all.splitpath = document.getElementById("splitpath").checked;
+		all.owshuffle = owshuffle;
+		all.crossedow = crossedow;
+		all.similarow = similarow;
+		all.mixedow = mixedow;
+		all.fluteshuffle = fluteshuffle;
+		all.worldState = worldState;
+		all.entranceEnabled = entranceEnabled;
+		for(let checkboxFlag of checkboxFlags)
+			all[checkboxFlag] = document.getElementById(checkboxFlag).checked;
+		all.sideBySide = sideBySide;
+		all.fullZoom = fullZoom;
 		all.timeString = new Date().toLocaleString();
 		return all;
 	};
@@ -687,54 +987,178 @@
 		lobbyshuffle = newData.lobbyshuffle;
 		excludesmallkeys = newData.excludesmallkeys;
 		excludebigkeys = newData.excludebigkeys;
+		owshuffle = newData.owshuffle;
+		if(owshuffle !== 'N' && owshuffle !== 'P' && owshuffle !== 'F')
+			owshuffle = 'N';
+		clearOverworldTransitions();
+		try
+		{
+			let overworldTransitions = newData.overworldTransitions;
+			if(overworldTransitions)
+				for(let [screenID1,edgeID1,screenID2,edgeID2] of overworldTransitions)
+					connectEdgesByKeys(screenID1,edgeID1,screenID2,edgeID2,true);
+		}
+		catch(error)
+		{
+			console.log(error);
+		}
+		clearMixedStates();
+		try
+		{
+			let mixedStates = newData.mixedStates;
+			if(mixedStates)
+				for(let [id,state] of mixedStates)
+				{
+					if(["unknown","normal","swapped"].includes(""+state))
+					{
+						let screen = overworldScreens.get(id);
+						screen.mixedState = ""+state;
+						if(screen.parallel)
+							screen.parallel.mixedState = ""+state;
+						else
+							if(id === 0x80 || id === 0x82)
+								overworldScreens.get(0x102-id).mixedState = ""+state;
+					}
+				}
+		}
+		catch(error)
+		{
+			console.log(error);
+		}
+		clearEntranceConnectors();
+		try
+		{
+			for(let connector of newData.entranceConnectors)
+			{
+				let [screenID1,regionName1,screenID2,regionName2] = connector.data;
+				createEntranceConnector(overworldScreens.get(screenID1).regions.get(regionName1),overworldScreens.get(screenID2).regions.get(regionName2),connector.status,connector.id);
+			}
+		}
+		catch(error)
+		{
+			console.log(error);
+		}
+		customStartRegions = [];
+		try
+		{
+			for(let regionData of newData.customStartRegions)
+				customStartRegions.push(overworldScreens.get(regionData[0]).regions.get(regionData[1]));
+		}
+		catch(error)
+		{
+			console.log(error);
+		}
+		ownItems = newData.items;
+		if(!ownItems || typeof ownItems !== 'object')
+			ownItems = {};
+		let newOWNotes = newData.overworldNotes;
+		document.getElementById("owpathsnote").value = typeof newOWNotes === "string" || newOWNotes instanceof String ?newOWNotes :"";
+		customFluteSpots = [];
+		try
+		{
+			if(newData.customFluteSpots)
+				for(let id of newData.customFluteSpots)
+					if(Number.isInteger(id) && id >= 0x00 && id < 0x80 && overworldScreens.has(id))
+						customFluteSpots.push(id%0x40);
+			else
+				customFluteSpots = [0x30];
+		}
+		catch(error)
+		{
+			console.log(error);
+		}
+		customFluteSpots.sort((a,b)=>a-b);
+		pinnedPaths = newData.pinnedPaths;
+		previousPaths = newData.previousPaths;
+		crossedow = newData.crossedow;
+		similarow = newData.similarow;
+		mixedow = newData.mixedow;
+		fluteshuffle = newData.fluteshuffle;
+		worldState = newData.worldState;
+		if(worldState !== 'S' && worldState !== 'O' && worldState !== 'I' && worldState !== 'R')
+			worldState = 'O';
+		entranceEnabled = newData.entranceEnabled;
 		document.getElementById("selectdoorshuffle").value = ""+doorshuffle;
 		document.getElementById("lobbyshuffle").checked = lobbyshuffle;
 		document.getElementById("excludesmallkeys").checked = excludesmallkeys;
 		document.getElementById("excludebigkeys").checked = excludebigkeys;
-		document.getElementById("showmorerooms").checked = newData.showmorerooms;
-		document.getElementById("splitpath").checked = newData.splitpath;
+		document.getElementById("selectowshuffle").value = ""+owshuffle;
+		document.getElementById("crossedow").checked = crossedow;
+		document.getElementById("similarow").checked = similarow;
+		document.getElementById("mixedow").checked = mixedow;
+		document.getElementById("fluteshuffle").checked = fluteshuffle;
+		document.getElementById("selectworldstate").value = ""+worldState;
+		document.getElementById("entranceenabled").checked = entranceEnabled;
+		for(let checkboxFlag of checkboxFlags)
+			document.getElementById(checkboxFlag).checked = newData[checkboxFlag];
+		sideBySide = document.getElementById("sidebysideow").checked;
+		fullZoomAuto = document.getElementById("zoomautoow").checked;
+		fullZoom = newData.fullZoom ?Math.max(.5,Math.min(newData.fullZoom,1.5)) :.8;
+		updateOverviewElements();
+		updateReachableEdges();
+		updateItemTracker();
+		updateConnectorList();
+		updateStartRegionList();
+		updateMainPathLists();
 		return true;
 	};
 
 	window.loadManual = function()
 	{
 		let data = JSON.parse(localStorage.getItem("dungeonData"));
-		if(data && confirm("Load saved data from local storage?\nThis will replace all currently set dungeon paths and notes.\n\nSaved at: "+data.timeString))
+		if(data && confirm("Load saved data from local storage?\nThis will replace all currently set dungeon paths, overworld transitions and notes.\n\nSaved at: "+data.timeString))
 			if(loadAll(data))
 				loadOverview();
 			else
 				console.log("Error while loading data from manual save");
 	};
 
-	window.saveManual = function()
+	window.saveManual = function(button)
 	{
 		localStorage.setItem("dungeonData",JSON.stringify(allData()));
 		document.getElementById("loadmanual").classList.remove("disabled");
+		buttonFlash(button);
 	};
 
 	window.loadAuto = function()
 	{
 		let data = JSON.parse(localStorage.getItem("dungeonDataAutoSave"));
-		if(data && confirm("Load auto-save data from local storage?\nThis will replace all currently set dungeon paths and notes.\n\nSaved at: "+data.timeString))
+		if(data && confirm("Load auto-save data from local storage?\nThis will replace all currently set dungeon paths, overworld transitions and notes.\n\nSaved at: "+data.timeString))
 			if(loadAll(data))
 				loadOverview();
 			else
 				console.log("Error while loading data from auto-save");
 	};
 
-	window.saveAuto = function()
+	window.saveAuto = function(data)
 	{
-		localStorage.setItem("dungeonDataAutoSave",JSON.stringify(allData()));
+		localStorage.setItem("dungeonDataAutoSave",JSON.stringify(data));
 		document.getElementById("loadauto").classList.remove("disabled");
 	};
 
 	window.clearData = function()
 	{
-		if(confirm("Delete all currently loaded paths and notes for every dungeon?"))
+		if(confirm("Delete all currently loaded paths and notes for every dungeon and the overworld?"))
 		{
 			dungeonPaths = [];
 			for(let k = 0; k < 13; k++)
 				dungeonPaths[k] = {"paths":[],"notes":"","completed":false};
+			clearOverworldTransitions();
+			clearMixedStates();
+			ownItems = {};
+			document.getElementById("activeflutebox").checked = false;
+			clearEntranceConnectors();
+			document.getElementById("owpathsnote").value = "";
+			customStartRegions = [];
+			customFluteSpots = [0x30];
+			pinnedPaths = [];
+			previousPaths = [];
+			updateOverviewElements();
+			updateReachableEdges();
+			updateItemTracker();
+			updateConnectorList();
+			updateStartRegionList();
+			updateMainPathLists();
 			loadOverview();
 		}
 	};
@@ -749,16 +1173,6 @@
 		}
 	};
 
-	window.initializeSymbols = function(list,key)
-	{
-		for(let k = 0; k < list.length; k++)
-		{
-			let id = key+k.toString(36);
-			list[k].id = id;
-			symbolMap[id] = list[k];
-		}
-	};
-
 	window.start = function()
 	{
 		dungeonPaths = [];
@@ -768,16 +1182,57 @@
 			doorshuffle = query.door_shuffle[0];
 		if(doorshuffle !== 'N' && doorshuffle !== 'B' && doorshuffle !== 'C')
 			doorshuffle = 'C';
+		if(query.overworld_shuffle)
+			owshuffle = query.overworld_shuffle[0];
+		if(owshuffle !== 'N' && owshuffle !== 'P' && owshuffle !== 'F')
+			owshuffle = 'N';
         if((query.wild_keys+'').toLowerCase() === 'true' || query.world_state === 'R' || query.world_state === 'r')
             excludesmallkeys = false;
         if((query.wild_big_keys+'').toLowerCase() === 'true')
             excludebigkeys = false;
+		if(query.world_state)
+			worldState = query.world_state[0];
+		if(worldState !== 'S' && worldState !== 'O' && worldState !== 'I' && worldState !== 'R')
+			worldState = 'O';
+		if(query.entrance_shuffle && query.entrance_shuffle !== 'N' && query.entrance_shuffle !== 'n')
+			entranceEnabled = true;
 		document.getElementById("selectdoorshuffle").value = ""+doorshuffle;
 		document.getElementById("lobbyshuffle").checked = lobbyshuffle;
 		document.getElementById("excludesmallkeys").checked = excludesmallkeys;
 		document.getElementById("excludebigkeys").checked = excludebigkeys;
+		document.getElementById("selectowshuffle").value = ""+owshuffle;
+		document.getElementById("crossedow").checked = false;
+		document.getElementById("similarow").checked = false;
+		document.getElementById("mixedow").checked = false;
+		document.getElementById("fluteshuffle").checked = false;
+		document.getElementById("selectworldstate").value = ""+worldState;
+		document.getElementById("entranceenabled").checked = entranceEnabled;
 		document.getElementById("showmorerooms").checked = false;
 		document.getElementById("splitpath").checked = true;
+		document.getElementById("owsidebaredit").checked = true;
+		document.getElementById("owsidebarnew").checked = true;
+		document.getElementById("owsidebarsearch").checked = true;
+		document.getElementById("itemsync").checked = true;
+		document.getElementById("connectortr").checked = false;
+		document.getElementById("connectorhccsanc").checked = false;
+		document.getElementById("connectorboesanc").checked = false;
+		document.getElementById("connectorboehcb").checked = false;
+		document.getElementById("connectorboehcc").checked = false;
+		document.getElementById("connectorsanchcb").checked = false;
+		document.getElementById("connectorsanchcc").checked = false;
+		document.getElementById("connectorsync").checked = true;
+		document.getElementById("owpathsnote").value = "";
+		document.getElementById("pinnedlinkshouse").checked = true;
+		document.getElementById("pinnedsanctuary").checked = false;
+		document.getElementById("pinnedoldman").checked = false;
+		document.getElementById("pinnedpyramid").checked = false;
+		document.getElementById("compactpinned").checked = true;
+		document.getElementById("compactprevious").checked = true;
+		document.getElementById("alwaysfollowmarked").checked = true;
+		document.getElementById("compactsearchresults").checked = true;
+		document.getElementById("sidebysideow").checked = false;
+		document.getElementById("zoomautoow").checked = true;
+		document.getElementById("owsearchincludecommon").checked = true;
 		try
 		{
 			if(localStorage.getItem("dungeonData"))
@@ -788,173 +1243,1698 @@
 		catch(error)
 		{
 		}
+		initializeOverworldGraph();
 		initializeRoomsAndSymbols();
+		updateReachableEdges();
 		loadOverview();
+		updateOverviewElements();
+		resizeHandler();
+		window.addEventListener("resize",resizeHandler,false);
 		window.addEventListener("keydown",keyDown,false);
-		if(query.request_update && window.opener && !window.opener.closed)
+		if(window.opener && !window.opener.closed)
 		{
 			window.addEventListener("message",receiveMessage,false);
-			window.opener.postMessage("UPDATE","*");
+			if(query.request_update)
+				window.opener.postMessage("UPDATE","*");
+			else
+				window.opener.postMessage("ITEMS","*");
 		}
 	};
 
-	window.initializeRoomsAndSymbols = function()
+	window.loadOverworld = function()
 	{
-		dungeonImportant.push({"dungeon":11,"name":"Lobby","supertile":0x61,"part":"full"});
-		dungeonEntrances.push({"dungeon":0,"name":"Entrance","supertile":0xC9,"part":"full"});
-		dungeonEntrances.push({"dungeon":1,"name":"Main","supertile":0x84,"part":"full"});
-		dungeonEntrances.push({"dungeon":1,"name":"West","supertile":0x83,"part":"bottomleft"});
-		dungeonEntrances.push({"dungeon":1,"name":"East","supertile":0x85,"part":"bottomright"});
-		dungeonEntrances.push({"dungeon":1,"name":"Back","supertile":0x63,"part":"bottomleft"});
-		dungeonImportant.push({"dungeon":1,"name":"Lobby","supertile":0x84,"part":"full"});
-		dungeonEntrances.push({"dungeon":2,"name":"Entrance","supertile":0x77,"part":"full"});
-		dungeonImportant.push({"dungeon":2,"name":"Lobby","supertile":0x77,"part":"full"});
-		dungeonImportant.push({"dungeon":2,"name":"Big Key Door","supertile":0x31,"part":"full"});
-		dungeonImportant.push({"dungeon":2,"name":"Big Chest Room","supertile":0x27,"part":"full"});
-		dungeonImportant.push({"dungeon":2,"name":"Bumper Room","supertile":0x17,"part":"full"});
-		dungeonEntrances.push({"dungeon":3,"name":"Entrance","supertile":0x4A,"part":"full"});
-		dungeonImportant.push({"dungeon":3,"name":"Pit Room","supertile":0x3A,"part":"full"});
-		dungeonImportant.push({"dungeon":3,"name":"Arena","supertile":0x2A,"part":"full"});
-		dungeonImportant.push({"dungeon":3,"name":"Falling Bridge","supertile":0x1A,"part":"full"});
-		dungeonEntrances.push({"dungeon":4,"name":"Entrance","supertile":0x28,"part":"full"});
-		dungeonImportant.push({"dungeon":4,"name":"Drained Dam","supertile":0x28,"part":"full"});
-		dungeonImportant.push({"dungeon":4,"name":"Hub","supertile":0x36,"part":"full"});
-		dungeonEntrances.push({"dungeon":5,"name":"Front Main","supertile":0x58,"part":"bottomleft"});
-		dungeonEntrances.push({"dungeon":5,"name":"Front West","supertile":0x67,"part":"topleft"});
-		dungeonEntrances.push({"dungeon":5,"name":"Front Pinball","supertile":0x68,"part":"full"});
-		dungeonEntrances.push({"dungeon":5,"name":"Front North","supertile":0x58,"part":"topright"});
-		dungeonEntrances.push({"dungeon":5,"name":"Middle East","supertile":0x57,"part":"bottomleft"});
-		dungeonEntrances.push({"dungeon":5,"name":"Middle West","supertile":0x56,"part":"bottomleft"});
-		dungeonEntrances.push({"dungeon":5,"name":"Middle North","supertile":0x56,"part":"topright"});
-		dungeonEntrances.push({"dungeon":5,"name":"Back","supertile":0x59,"part":"bottomleft"});
-		dungeonEntrances.push({"dungeon":6,"name":"Entrance","supertile":0xDB,"part":"full"});
-		dungeonEntrances.push({"dungeon":6,"name":"Blind's Cell","supertile":0x45,"part":"topright"});
-		dungeonEntrances.push({"dungeon":6,"name":"Boss Room","supertile":0xAC,"part":"bottomright"});
-		dungeonImportant.push({"dungeon":6,"name":"Lobby SW","supertile":0xDB,"part":"full"});
-		dungeonImportant.push({"dungeon":6,"name":"Lobby NW","supertile":0xCB,"part":"full"});
-		dungeonImportant.push({"dungeon":6,"name":"Lobby NE","supertile":0xCC,"part":"full"});
-		dungeonImportant.push({"dungeon":6,"name":"Lobby SE","supertile":0xDC,"part":"full"});
-		dungeonImportant.push({"dungeon":6,"name":"Attic","supertile":0x65,"part":"bottomright"});
-		dungeonEntrances.push({"dungeon":7,"name":"Entrance","supertile":0x0E,"part":"bottomright"});
-		dungeonImportant.push({"dungeon":7,"name":"Pushable Block","supertile":0x9E,"part":"bottomright"});
-		dungeonEntrances.push({"dungeon":8,"name":"Entrance","supertile":0x98,"part":"bottomleft"});
-		dungeonImportant.push({"dungeon":8,"name":"Hub","supertile":0xC2,"part":"full"});
-		dungeonEntrances.push({"dungeon":9,"name":"Main","supertile":0xD6,"part":"bottomright"});
-		dungeonEntrances.push({"dungeon":9,"name":"West","supertile":0x23,"part":"bottomright"});
-		dungeonEntrances.push({"dungeon":9,"name":"East","supertile":0x24,"part":"bottomright"});
-		dungeonEntrances.push({"dungeon":9,"name":"Back","supertile":0xD5,"part":"bottomleft"});
-		dungeonImportant.push({"dungeon":9,"name":"Hub","supertile":0xC6,"part":"full"});
-		dungeonEntrances.push({"dungeon":10,"name":"Entrance","supertile":0x0C,"part":"full"});
-		dungeonImportant.push({"dungeon":10,"name":"Torch Area","supertile":0x8C,"part":"full"});
-		dungeonEntrances.push({"dungeon":11,"name":"Main","supertile":0x61,"part":"full"});
-		dungeonEntrances.push({"dungeon":11,"name":"West","supertile":0x60,"part":"full"});
-		dungeonEntrances.push({"dungeon":11,"name":"East","supertile":0x62,"part":"full"});
-		dungeonEntrances.push({"dungeon":11,"name":"Back","supertile":0x11,"part":"full"});
-		dungeonEntrances.push({"dungeon":11,"name":"Sanctuary","supertile":0x12,"part":"full"});
-		dungeonEntrances.push({"dungeon":11,"name":"Zelda's Cell","supertile":0x80,"part":"topright"});
-		dungeonEntrances.push({"dungeon":12,"name":"Entrance","supertile":0x30,"part":"bottomleft"});
-		lobbyEntrances.push({"name":"Entr- ance",file:"dungeonentrance0"});
-		lobbyEntrances.push({"name":"Entr- ance 1",file:"dungeonentrance1"});
-		lobbyEntrances.push({"name":"Entr- ance 2",file:"dungeonentrance2"});
-		lobbyEntrances.push({"name":"Entr- ance 3",file:"dungeonentrance3"});
-		lobbyEntrances.push({"name":"Entr- ance 4",file:"dungeonentrance4"});
-		lobbySanctuary = {"dungeon":11,"name":"Sanctuary","supertile":0x12,"part":"full"};
-		lobbySW.push({"dungeon":5,"name":"Front West Drop","supertile":0x67,"part":"topleft"});
-		lobbySW.push({"dungeon":5,"name":"Front Pinball Drop","supertile":0x68,"part":"full"});
-		lobbySW.push({"dungeon":5,"name":"Front North Drop","supertile":0x58,"part":"topright"});
-		lobbySW.push({"dungeon":5,"name":"Middle North Drop","supertile":0x56,"part":"topright"});
-		lobbyTT.push({"dungeon":6,"name":"Blind's Cell","supertile":0x45,"part":"topright"});
-		lobbyTT.push({"dungeon":6,"name":"Boss Room","supertile":0xAC,"part":"bottomright"});
-		lobbyHC.push({"dungeon":11,"name":"Back of Escape Drop","supertile":0x11,"part":"full"});
-		lobbyHC.push({"dungeon":11,"name":"Zelda's Cell","supertile":0x80,"part":"topright"});
-		for(let k = 0; k < dungeonEntrances.length; k++)
+		currentDungeon = -1;
+		currentOWPath = null;
+		document.getElementById("owmaintablenewpath").style.display = owshuffle === 'N' ?"none" :"";
+		document.getElementById("pinnedlinkshouse").nextSibling.innerHTML = worldState === 'I' ?"Link's House" :"Link's House";
+		document.getElementById("pinnedsanctuary").nextSibling.innerHTML = worldState === 'I' ?"Dark Chapel" :"Sanctuary";
+		document.getElementById("pinnedoldman").nextSibling.innerHTML = worldState === 'I' ?"Dark Mountain" :"Mountain Cave";
+		document.getElementById("pinnedpyramid").nextSibling.innerHTML = worldState === 'I' ?"Castle" :"Pyramid";
+		document.getElementById("dungeonconnectorsdefault").style.display = entranceEnabled ?"none" :"block";
+		document.getElementById("dungeonconnectorsdoors").style.display = entranceEnabled || doorshuffle === 'N' ?"none" :"block";
+		document.getElementById("owentrancecontainer").style.display = entranceEnabled ?"block" :"none";
+		document.getElementById("owfluteshufflerow").style.display = fluteshuffle ?"block" :"none";
+		document.getElementById("owpreviouspathscontainer").style.display = owshuffle === 'N' ?"none" :"block";
+		document.getElementById("owvanillatransitions").style.display = owshuffle === 'N' && !crossedow ?"none" :"";
+		updateConnectorList();
+		updateStartRegionList();
+		updateMainPathLists();
+		if(outstandingUpdate)
+			sendUpdate();
+		activeOverworld();
+		switchScene("owmain");
+	};
+
+	window.sideLoadOverworld = function()
+	{
+		currentPath = null;
+		if(currentDungeon != -1)
+			saveNotes();
+		loadOverworld();
+	};
+
+	window.activeOverworld = function()
+	{
+		document.getElementById("sidebossow").classList.add("activetab");
+		document.getElementById("sidesummaryow").classList.add("activetab");
+		for(let k = 0; k < 13; k++)
 		{
-			let id = "0"+k.toString(36);
-			dungeonEntrances[k].id = id;
-			roomMap[id] = dungeonEntrances[k];
+			document.getElementById("sideboss"+k).classList.remove("activetab");
+			document.getElementById("sidesummary"+k).classList.remove("activetab");
 		}
-		for(let k = 0; k < dungeonImportant.length; k++)
+	};
+
+	window.updateConnectorList = function()
+	{
+		document.getElementById("owconnectorlisttext").innerHTML = "Connector caves ("+entranceConnectors.length+")";
+		if(document.getElementById("connectorsync").checked)
+			document.getElementById("owmainaddconnector").classList.add("disabled");
+		else
+			document.getElementById("owmainaddconnector").classList.remove("disabled");
+		let s = "";
+		for(let k = 0; k < entranceConnectors.length; k++)
 		{
-			let id = "1"+k.toString(36);
-			dungeonImportant[k].id = id;
-			roomMap[id] = dungeonImportant[k];
+			s += "<div class='connector'"+(entranceConnectors[k].status === "unknown" ?" style='border-left: 4px solid yellow; padding-left: 4px; margin: 2px 0;'" :"");
+			s += "onclick='showClickConnectorModal(event,"+k+")'><div class='row' style='max-width: 400px;'><div style='display: inline-block;'>";
+			s += "<h3 class='textrow'>"+connectorString(entranceConnectors[k])
+			s += "</h3></div></div>";
+			if(entranceConnectors[k].status === "unknown")
+			{
+				s += "<div class='row' style='max-width: 400px;'><div style='display: inline-block;'>";
+				s += "<div class='cell' style='line-height: 34px; margin-right: 8px;'>Currently possible backwards?</div>"
+				s += "<div class='cell buttonbox' onclick='unknownConnectorOneWay("+k+"); event.stopPropagation()'>No</div>";
+				s += "<div class='cell buttonbox' onclick='unknownConnectorTwoWay("+k+"); event.stopPropagation()'>Yes</div></div></div>";
+			}
+			s += "</div>";
 		}
-		let lobbyAll = lobbyEntrances.concat(lobbySanctuary,lobbySW,lobbyTT,lobbyHC)
-		for(let k = 0; k < lobbyAll.length; k++)
+		document.getElementById("owentranceconnectors").innerHTML = s;
+		fullCheckConnectorDetails();
+		hideClickConnectorModal();
+	};
+
+	window.fullCheckConnectorDetails = function()
+	{
+		if(entranceEnabled && fullOverworldMode === "editedges" && !fullOWSelectedScreen && !fullOWSelectedEdge && !fullOWConnectorStart)
+			for(let k = entranceConnectors.length-1; k >= 0; k--)
+				if(entranceConnectors[k].status === "unknown")
+				{
+					lastUnknownConnectorIndex = k;
+					document.getElementById("fullowunknownconnectortext").innerHTML = connectorString(entranceConnectors[k]);
+					document.getElementById("fullowunknownconnector").style.display = "block";
+					return;
+				}
+		lastUnknownConnectorIndex = -1;
+		document.getElementById("fullowunknownconnector").style.display = "none";
+	};
+
+	window.connectorString = function(connector)
+	{
+		let regionStart = overworldScreens.get(connector.data[0]).regions.get(connector.data[1]),regionEnd = overworldScreens.get(connector.data[2]).regions.get(connector.data[3]);
+		let s = regionStart.screen.name;
+		if(regionStart.screen.entranceRegions.length != 1)
+			s += " - "+regionStart.name;
+		s += (connector.status === "both" ?" <=> " :(connector.status === "unknown" ?" ?=> " :" ==> "))+regionEnd.screen.name;
+		if(regionEnd.screen.entranceRegions.length != 1)
+			s += " - "+regionEnd.name;
+		return s;
+	};
+
+	window.unknownConnectorOneWay = function(index)
+	{
+		if(entranceConnectors[index].status === "unknown")
 		{
-			let id = "2"+k.toString(36);
-			lobbyAll[k].id = id;
-			roomMap[id] = lobbyAll[k];
+			entranceConnectors[index].status = "single";
+			outstandingUpdate = true;
+			updateConnectorList();
 		}
-		directions.push({"folder":"dungeons","file":"arrowright","x":128,"y":64});
-		directions.push({"folder":"dungeons","file":"arrowrightup","x":128,"y":32});
-		directions.push({"folder":"dungeons","file":"arrowrightdown","x":128,"y":96});
-		directions.push({"folder":"dungeons","file":"arrowright","rotate":90,"x":64,"y":128});
-		directions.push({"folder":"dungeons","file":"arrowrightup","rotate":90,"x":96,"y":128});
-		directions.push({"folder":"dungeons","file":"arrowrightdown","rotate":90,"x":32,"y":128});
-		directions.push({"folder":"dungeons","file":"arrowright","rotate":180,"x":0,"y":64});
-		directions.push({"folder":"dungeons","file":"arrowrightup","rotate":180,"x":0,"y":96});
-		directions.push({"folder":"dungeons","file":"arrowrightdown","rotate":180,"x":0,"y":32});
-		directions.push({"folder":"dungeons","file":"arrowright","rotate":270,"x":64,"y":0});
-		directions.push({"folder":"dungeons","file":"arrowrightup","rotate":270,"x":32,"y":0});
-		directions.push({"folder":"dungeons","file":"arrowrightdown","rotate":270,"x":96,"y":0});
-		directions.push({"folder":"dungeons","file":"quadranttopleft","x":48,"y":48});
-		directions.push({"folder":"dungeons","file":"quadranttopleft","rotate":90,"x":80,"y":48});
-		directions.push({"folder":"dungeons","file":"quadranttopleft","rotate":270,"x":48,"y":80});
-		directions.push({"folder":"dungeons","file":"quadranttopleft","rotate":180,"x":80,"y":80});
-		objects.push({"folder":"dungeons","file":"trapdoor"});
-		objects.push({"folder":"dungeons","file":"keychest0"});
-		objects.push({"folder":"dungeons","file":"prize0"});
-		switchobjects.push({"folder":"dungeons","file":"crystalswitch","basic":[2,3,4,6,7,8,9,10]});
-		switchobjects.push({"folder":"dungeons","file":"orangedown","basic":[2,3,4,6,7,8,9,10]});
-		switchobjects.push({"folder":"dungeons","file":"bluedown","basic":[2,3,4,6,7,8,9,10]});
-		switchobjects.push({"folder":"dungeons","file":"lever","basic":[4]});
-		switchobjects.push({"folder":"dungeons","file":"drain","basic":[4]});
-		items.push({"folder":"dungeons","file":"smallkey"});
-		items.push({"folder":"dungeons","file":"bigkey"});
-		items.push({"folder":"items","file":"bomb"});
-		items.push({"folder":"items","file":"somaria","basic":[7,8,9,10]});
-		items.push({"folder":"items","file":"firerod","basic":[5,9,10]});
-		items.push({"folder":"items","file":"lantern","basic":[0,3,8,9,11,12]});
-		items.push({"folder":"dungeons","file":"torch","basic":[1,2,8,10]});
-		items.push({"folder":"items","file":"flippers","basic":[4]});
-		items.push({"folder":"items","file":"hookshot","basic":[0,2,4,5,7,8,9,10]});
-		items.push({"folder":"items","file":"boots","basic":[1,3,5,8,9,10]});
-		items.push({"folder":"items","file":"bow1","basic":[0,3,10]});
-		items.push({"folder":"items","file":"hammer","basic":[3,4,6,7,10]});
-		items.push({"folder":"items","file":"sword1","basic":[5,12]});
-		items.push({"folder":"items","file":"glove1","basic":[1,6,7]});
-		items.push({"folder":"items","file":"shield3","basic":[9]});
-		items.push({"folder":"dungeons","file":"freezor","basic":[7]});
-		items.push({"folder":"dungeons","file":"wizzrobe","basic":[8,10]});
-		items.push({"folder":"items","file":"boomerang2"});
-		items.push({"folder":"items","file":"mirror","basic":[1,4,5,6,11]});
-		items.push({"folder":"items","file":"moonpearl"});
-		items.push({"folder":"dungeons","file":"spikefloor","basic":[7,8]});
-		items.push({"folder":"items","file":"magic"});
-		items.push({"folder":"dungeons","file":"smallchest"});
-		items.push({"folder":"dungeons","file":"bigchest","basic":[0,1,2,3,4,5,6,7,8,9,10]});
-		items.push({"folder":"dungeons","file":"talltorch","basic":[1,10]});
-		items.push({"folder":"dungeons","file":"keysteal"});
-		items.push({"folder":"dungeons","file":"map"});
-		items.push({"folder":"dungeons","file":"compass"});
-		items.push({"folder":"dungeons","file":"hinttile"});
-		items.push({"folder":"items","file":"heartcontainer"});
-		bosses.push({"folder":"dungeons","file":"boss0"});
-		bosses.push({"folder":"dungeons","file":"boss1"});
-		bosses.push({"folder":"dungeons","file":"boss2"});
-		bosses.push({"folder":"dungeons","file":"boss3"});
-		bosses.push({"folder":"dungeons","file":"boss4"});
-		bosses.push({"folder":"dungeons","file":"boss5"});
-		bosses.push({"folder":"dungeons","file":"boss6"});
-		bosses.push({"folder":"dungeons","file":"boss7"});
-		bosses.push({"folder":"dungeons","file":"boss8"});
-		bosses.push({"folder":"dungeons","file":"boss9"});
-		bosses.push({"folder":"dungeons","file":"agahnim0"});
-		initializeSymbols(directions,'d');
-		initializeSymbols(objects,'o');
-		initializeSymbols(switchobjects,'s');
-		initializeSymbols(items,'i');
-		initializeSymbols(bosses,'b');
+		else
+			if(entranceConnectors[index].status === "both")
+			{
+				makeEntranceConnectorUnidirectional(entranceConnectors[index]);
+				outstandingUpdate = true;
+				updateReachableEdges();
+				updateConnectorList();
+			}
+	};
+
+	window.unknownConnectorTwoWay = function(index)
+	{
+		if(entranceConnectors[index].status !== "both")
+		{
+			makeEntranceConnectorBidirectional(entranceConnectors[index]);
+			outstandingUpdate = true;
+			updateReachableEdges();
+			updateConnectorList();
+		}
+	};
+
+	window.fullConnectorOneWay = function()
+	{
+		fullCheckConnectorDetails();
+		if(lastUnknownConnectorIndex !== -1)
+		{
+			unknownConnectorOneWay(lastUnknownConnectorIndex);
+			drawFullOverworldPanel();
+		}
+	};
+
+	window.fullConnectorTwoWay = function()
+	{
+		fullCheckConnectorDetails();
+		if(lastUnknownConnectorIndex !== -1)
+		{
+			unknownConnectorTwoWay(lastUnknownConnectorIndex);
+			drawFullOverworldPanel();
+		}
+	};
+
+	window.clickedConnectorOneWay = function()
+	{
+		unknownConnectorOneWay(clickedConnectorIndex);
+	};
+
+	window.clickedConnectorTwoWay = function()
+	{
+		unknownConnectorTwoWay(clickedConnectorIndex);
+	};
+
+	window.clickedConnectorUnknown = function()
+	{
+		if(entranceConnectors[clickedConnectorIndex].status === "single")
+		{
+			entranceConnectors[clickedConnectorIndex].status = "unknown";
+			outstandingUpdate = true;
+			updateConnectorList();
+		}
+		else
+			if(entranceConnectors[clickedConnectorIndex].status === "both")
+			{
+				makeEntranceConnectorUnidirectional(entranceConnectors[clickedConnectorIndex]);
+				entranceConnectors[clickedConnectorIndex].status = "unknown";
+				outstandingUpdate = true;
+				updateReachableEdges();
+				updateConnectorList();
+			}
+	};
+
+	window.deleteClickedConnector = function()
+	{
+		if(!document.getElementById("connectorsync").checked)
+		{
+			deleteEntranceConnector(clickedConnectorIndex,entranceConnectors[clickedConnectorIndex]);
+			outstandingUpdate = true;
+			updateReachableEdges();
+			updateConnectorList();
+		}
+	};
+
+	window.updateStartRegionList = function()
+	{
+		let s = "";
+		for(let k = 0; k < customStartRegions.length; k++)
+		{
+			let region = customStartRegions[k];
+			s += "<div class='row' style='max-width: 400px;'><div style='display: inline-block;'>";
+			s += "<h3 class='textrow'>"+region.screen.name;
+			if(region.screen.regions.size != 1)
+				s += " - "+region.name;
+			s += "</h3></div><div class='rightalign'><div class='cell'>";
+			s += "<div class='buttonsquare close' style='margin: 2px; border-color: rgb(255,128,128);' onclick='deleteStartRegion("+k+")'></div></div></div></div>";
+		}
+		document.getElementById("owstartregions").innerHTML = s;
+	};
+
+	window.deleteStartRegion = function(index)
+	{
+		customStartRegions.splice(index,1);
+		outstandingUpdate = true;
+		updateReachableEdges();
+		updateStartRegionList();
+	};
+
+	window.updateDefaultStartRegions = function()
+	{
+		outstandingUpdate = true;
+		updateReachableEdges();
+	};
+
+	window.updateOverworldNotes = function()
+	{
+		outstandingUpdate = true;
+	};
+
+	window.closeOverworld = function()
+	{
+		if(outstandingUpdate)
+			sendUpdate();
+		loadOverview();
+	};
+
+	window.toggleItem = function(item)
+	{
+		if(document.getElementById("itemsync").checked)
+		{
+			if(window.opener && !window.opener.closed)
+				window.opener.postMessage("TOGGLE "+(item === "gloves" ?"glove" :item),"*");
+		}
+		else
+		{
+			if(item === "gloves")
+			{
+				if(ownItems.mitts)
+				{
+					ownItems.gloves = ownItems.mitts = false;
+					document.getElementById("item"+item).classList.remove("collected","mitts");
+				}
+				else
+					if(ownItems.gloves)
+					{
+						ownItems.mitts = true;
+						document.getElementById("item"+item).classList.add("collected","mitts");
+					}
+					else
+					{
+						ownItems.gloves = true;
+						document.getElementById("item"+item).classList.add("collected");
+					}
+			}
+			else
+			{
+				if(ownItems[item] = !ownItems[item])
+					document.getElementById("item"+item).classList.add("collected");
+				else
+					document.getElementById("item"+item).classList.remove("collected");
+			}
+			outstandingUpdate = true;
+			updateReachableEdges();
+		}
+	};
+
+	window.toggleActiveFlute = function()
+	{
+		outstandingUpdate = true;
+		updateReachableEdges();
+	};
+
+	window.clickFluteActivated = function()
+	{
+		document.getElementById("activeflutebox").checked = true;
+		outstandingUpdate = true;
+		updateReachableEdges();
+		drawFullOverworldPanel();
+	};
+
+	window.clickSetFluteSpots = function()
+	{
+		if(fluteshuffle)
+		{
+			if(!sideBySide)
+				drawDarkWorld = worldState === 'I';
+			showFullOverworldModal("editflutespots");
+		}
+	};
+
+	window.toggleConnector = function(checkbox)
+	{
+		ownItems[checkbox.id] = checkbox.checked;
+		outstandingUpdate = true;
+		updateReachableEdges();
+	};
+
+	window.clickScreenFull = function(id)
+	{
+		switch(fullOverworldMode)
+		{
+			case "newpath":
+				startOverworldPath(id);
+				return;
+			case "continuepath":
+				selectTargetScreen(id);
+				return;
+			case "searchpath":
+				startOverworldSearch(id);
+				return;
+			case "searchpathtarget":
+				currentOWScreen = overworldScreens.get(id);
+				searchOverworldPath(true);
+				return;
+			case "searchpathstart":
+				searchStartScreen = overworldScreens.get(id);
+				searchOverworldPath(false);
+				return;
+			case "editedges":
+				updateClickScreenOptions(id);
+				return;
+			case "editflutespots":
+				if(customFluteSpots.includes(id%0x40))
+					customFluteSpots.splice(customFluteSpots.indexOf(id%0x40),1);
+				else
+				{
+					customFluteSpots.push(id%0x40);
+					customFluteSpots.sort((a,b)=>a-b);
+				}
+				outstandingUpdate = true;
+				updateReachableEdges();
+				drawFullOverworldPanel();
+		}
+	};
+
+	window.clickEdgeFull = function(screenID,edgeString)
+	{
+		if(fullOverworldMode === "editedges")
+		{
+			if(fullOWSelectedEdge)
+			{
+				let edge = overworldScreens.get(screenID).edges.get(edgeString);
+				if(edge === fullOWSelectedEdge)
+				{
+					fullOWSelectedEdge = null;
+					document.getElementById("fullowedgeactions").style.display = "none";
+					fullCheckConnectorDetails();
+				}
+				else
+				{
+					if(edge.direction === opposite[fullOWSelectedEdge.direction] && edge.water === fullOWSelectedEdge.water)
+					{
+						connectSimilarParallel(fullOWSelectedEdge,edge);
+						fullOWSelectedEdge = null;
+						document.getElementById("fullowedgeactions").style.display = "none";
+						fullCheckConnectorDetails();
+						outstandingUpdate = true;
+						updateReachableEdges();
+					}
+				}
+			}
+			else
+			{
+				if(owshuffle === 'N')
+				{
+					let edge = overworldScreens.get(screenID).edges.get(edgeString);
+					if(similarow && (screenID%0x40 === 0x28 || screenID%0x40 === 0x29) && (edge.vanilla.screen.id%0x40 === 0x28 || edge.vanilla.screen.id%0x40 === 0x29))
+						edge = overworldScreens.get(0x68).edges.get("E0");
+					let edgeVanilla = !edge.parallel || isDarkWorld(edge.screen) === isDarkWorld(edge.vanilla.screen) ?edge.vanilla :edge.parallel.vanilla;
+					if(edge.out)
+					{
+						if(edge.out === edgeVanilla)
+						{
+							connectSimilarParallel(edge,edge.parallel ?edgeVanilla.parallel :edgeVanilla);
+							outstandingUpdate = true;
+							updateReachableEdges();
+						}
+						else
+						{
+							deleteSimilarParallel(edge);
+							outstandingUpdate = true;
+							updateReachableEdges();
+						}
+					}
+					else
+					{
+						connectSimilarParallel(edge,edgeVanilla);
+						outstandingUpdate = true;
+						updateReachableEdges();
+					}
+				}
+				else
+				{
+					fullOWSelectedEdge = overworldScreens.get(screenID).edges.get(edgeString);
+					fullOWSelectedScreen = null;
+					document.getElementById("fullowscreenactions").style.display = "none";
+					document.getElementById("fullowedgeactions").style.display = "block";
+					document.getElementById("fullowunknownconnector").style.display = "none";
+					if(fullOWSelectedEdge.out || fullOWSelectedEdge.in)
+					{
+						document.getElementById("fullowedgetext").innerHTML = "This transition is already set. Clicking on another edge will replace the old connection.";
+						document.getElementById("fullowedgedelete").classList.remove("disabled");
+					}
+					else
+					{
+						document.getElementById("fullowedgetext").innerHTML = "Click on another edge to set a screen transition.";
+						document.getElementById("fullowedgedelete").classList.add("disabled");
+					}
+				}
+			}
+			drawFullOverworldPanel();
+		}
+	};
+
+	window.updateClickScreenOptions = function(id)
+	{
+		let screen = overworldScreens.get(id);
+		fullOWSelectedEdge = null;
+		document.getElementById("fullowedgeactions").style.display = "none";
+		if(fullOWConnectorStart)
+		{
+			if(screen.entranceRegions.length !== 0 && fullOWConnectorStart.entranceRegions.length !== 0)
+			{
+				fullOWConnectorEnd = screen;
+				hideFullOverworldModal();
+				showOverworldConnectorModal();
+			}
+		}
+		else
+		{
+			if(screen === fullOWSelectedScreen)
+			{
+				fullOWSelectedScreen = null;
+				document.getElementById("fullowscreenactions").style.display = "none";
+				fullCheckConnectorDetails();
+			}
+			else
+			{
+				fullOWSelectedScreen = screen;
+				if(screen.entranceRegions.length !== 0)
+					document.getElementById("fullownewconnector").classList.remove("disabled");
+				else
+					document.getElementById("fullownewconnector").classList.add("disabled");
+				document.getElementById("fullowscreenactions").style.display = "block";
+				document.getElementById("fullowscreenname").innerHTML = screen.name;
+				let s = "";
+				for(let regionName of screen.regions.keys())
+				{
+					s += "<div class='buttonbox small' style='float: left; margin: 2px;' onclick='addStartRegion(this,\""+regionName+"\")'>"+regionName+"</div>";
+				}
+				document.getElementById("fullowregionlist").innerHTML = s;
+				document.getElementById("fullowunknownconnector").style.display = "none";
+			}
+			drawFullOverworldPanel();
+		}
+	};
+
+	window.fullOverworldNewPath = function()
+	{
+		startOverworldPath(fullOWSelectedScreen.id);
+	};
+
+	window.fullOverworldSearch = function()
+	{
+		startOverworldSearch(fullOWSelectedScreen.id);
+	};
+
+	window.fullOverworldUnknownState = function()
+	{
+		setMixedScreen(fullOWSelectedScreen,"unknown");
+		outstandingUpdate = true;
+		fullOWSelectedScreen = null;
+		document.getElementById("fullowscreenactions").style.display = "none";
+		fullCheckConnectorDetails();
+		updateReachableEdges();
+		drawFullOverworldPanel();
+	};
+
+	window.fullOverworldNewConnector = function()
+	{
+		if(fullOWSelectedScreen && fullOWSelectedScreen.entranceRegions.length !== 0)
+		{
+			fullOWConnectorStart = fullOWSelectedScreen;
+			fullOWSelectedScreen = null;
+			document.getElementById("fullowscreenactions").style.display = "none";
+			document.getElementById("fullowconnectoractions").style.display = "block";
+			drawFullOverworldPanel();
+		}
+	};
+
+	window.addStartRegion = function(button,regionName)
+	{
+		customStartRegions.push(fullOWSelectedScreen.regions.get(regionName));
+		outstandingUpdate = true;
+		updateReachableEdges();
+		updateStartRegionList();
+		drawFullOverworldPanel();
+		buttonFlash(button);
+	};
+
+	window.fullOverworldDeleteConnection = function()
+	{
+		if(fullOWSelectedEdge && (fullOWSelectedEdge.out || fullOWSelectedEdge.in))
+		{
+			deleteSimilarParallel(fullOWSelectedEdge);
+			fullOWSelectedEdge = null;
+			document.getElementById("fullowedgeactions").style.display = "none";
+			outstandingUpdate = true;
+			fullCheckConnectorDetails();
+			updateReachableEdges();
+			drawFullOverworldPanel();
+		}
+	};
+
+	window.fullOverworldCancelConnector = function()
+	{
+		fullOWConnectorStart = null;
+		document.getElementById("fullowconnectoractions").style.display = "none";
+		drawFullOverworldPanel();
+	};
+
+	window.fullOverworldCommonStarts = function()
+	{
+		searchStartScreen = null;
+		searchOverworldPath(false);
+	};
+
+	window.startOverworldPath = function(id)
+	{
+		currentOWPath = [id];
+		let screen = currentOWScreen = overworldScreens.get(id);
+		document.getElementById("owcurrentpathheader").innerHTML = "Creating a new"+" overworld path";
+		updateCurrentOverworldPath();
+		drawDirectionsFromScreen(screen);
+		hideFullOverworldModal();
+		activeOverworld();
+		switchScene("owpathedit");
+	};
+
+	window.drawDirectionsFromScreen = function(screen)
+	{
+		let s = "<div style='position: absolute; left: 192px; top: 16px;'>"+drawSingleOverworldScreen(screen,"alledges")+"</div>";
+		for(let edgeString of screen.edges.keys())
+		{
+			let symbol = overworldEdgeToDirection[edgeString];
+			s += drawDirectionFromSymbol(symbol,"appendToOverworldPath(\""+edgeString+"\")");
+		}
+		if(screen.portal)
+			s += drawDirectionFromSymbol(overworldEdgeToDirection["PO"],"appendToOverworldPath(\"PO\")");
+		if(screen.darkWorld)
+			s += drawDirectionFromSymbol(overworldEdgeToDirection["MI"],"appendToOverworldPath(\"MI\")");
+		document.getElementById("owdirectionicons").innerHTML = s;
+	};
+
+	window.drawDirectionFromSymbol = function(symbol,onClick)
+	{
+		let style = "background-image: url("+"./images/"+symbol.folder+"/"+symbol.file+".png);"
+		if(symbol.rotate)
+			style += " transform: rotate("+symbol.rotate+"deg);";
+		style += " position: absolute; left: "+symbol.x+"px; top: "+symbol.y+"px;";
+		return "<div class='pathsymbol' style='"+style+"' onclick='"+onClick+"'></div>";
+	};
+
+	window.appendToOverworldPath = function(edgeString)
+	{
+		currentOWPath.push(edgeString);
+		if(edgeString == "PO" || edgeString == "MI")
+		{
+			currentOWScreen = currentOWScreen.parallel;
+			currentOWPath.push(edgeString,currentOWScreen.id);
+			updateCurrentOverworldPath();
+			drawDirectionsFromScreen(currentOWScreen);
+		}
+		else
+		{
+			let edge = currentOWScreen.edges.get(edgeString);
+			if(edge.out && document.getElementById("alwaysfollowmarked").checked)
+			{
+				currentOWScreen = edge.out.screen;
+				currentOWPath.push(edge.out.string,currentOWScreen.id);
+				updateCurrentOverworldPath();
+				drawDirectionsFromScreen(currentOWScreen);
+			}
+			else
+			{
+				updateCurrentOverworldPath();
+				fullOWFixedEdge = edge;
+				if(!sideBySide && !crossedow)
+					drawDarkWorld = isDarkWorld(currentOWScreen);
+				showFullOverworldModal("continuepath");
+			}
+		}
+		document.getElementById("owdeletebutton").classList.remove("disabled");
+		document.getElementById("owforkbutton").classList.remove("disabled");
+	};
+
+	window.appendTargetToOverworldPath = function(screen,edge)
+	{
+		currentOWPath.push(edge.string,screen.id);
+		currentOWScreen = screen;
+		drawDirectionsFromScreen(screen);
+		updateCurrentOverworldPath();
+	};
+
+	window.selectTargetScreen = function(id)
+	{
+		let screen = overworldScreens.get(id),validEdges = [];
+		extraOWDirection = opposite[fullOWFixedEdge.direction];
+		for(let edge of screen.edges.values())
+		{
+			if(edgesCompatible(edge,fullOWFixedEdge))
+			{
+				validEdges.push(edge);
+			}
+		}
+		if(validEdges.length === 1)
+		{
+			document.getElementById("fullowModal").style.display = "none";
+			appendTargetToOverworldPath(screen,validEdges[0]);
+		}
+		if(validEdges.length > 1)
+		{
+			document.getElementById("fullowModal").style.display = "none";
+			extraOWScreen = screen;
+			let options = [false,false,false];
+			for(let edge of validEdges)
+				options[edge.symbol] = true;
+			showOverworldExtraModal(options);
+		}
+	};
+
+	window.selectTargetEdge = function(index)
+	{
+		let edge = extraOWScreen.edges.get(extraOWDirection+index);
+		if(edge && edgesCompatible(edge,fullOWFixedEdge))
+		{
+			document.getElementById("owextraModal").style.display = "none";
+			appendTargetToOverworldPath(extraOWScreen,edge);
+		}
+	};
+
+	window.extraBackToFullOverworld = function()
+	{
+		document.getElementById("owextraModal").style.display = "none";
+		document.getElementById("fullowModal").style.display = "block";
+	};
+
+	window.editFluteSpots = function()
+	{
+		if(fluteshuffle)
+		{
+			if(!sideBySide)
+				drawDarkWorld = worldState === 'I';
+			showFullOverworldModal("editflutespots");
+		}
+	};
+
+	window.saveConnector = function()
+	{
+		let radioStart = document.querySelector("input[name='connectorstartgroup']:checked"),radioEnd = document.querySelector("input[name='connectorendgroup']:checked");
+		if(radioStart && radioEnd)
+		{
+			let regionStart = fullOWConnectorStart.regions.get(radioStart.value),regionEnd = fullOWConnectorEnd.regions.get(radioEnd.value);
+			createEntranceConnector(regionStart,regionEnd,document.getElementById("connectorbidirectional").checked ?"both" :"single",null);
+			sendUpdate();
+			updateReachableEdges();
+			updateConnectorList();
+			connectorBackToFullOverworld();
+		}
+	};
+
+	window.connectorBackToFullOverworld = function()
+	{
+		fullOWConnectorStart = null;
+		drawFullOverworldPanel();
+		document.getElementById("fullowconnectoractions").style.display = "none";
+		document.getElementById("owconnectorModal").style.display = "none";
+		document.getElementById("fullowModal").style.display = "block";
+	};
+
+	window.updateCurrentOverworldPath = function()
+	{
+		let [drawn,width,] = drawOverworldPath(currentOWPath,true,false);
+		document.getElementById("owcurrentpath").innerHTML = drawn;
+		if(width <= Math.max(256,document.getElementById("owcurrentpath").parentElement.offsetWidth))
+		{
+			document.getElementById("owcurrentpath").style.left = 0;
+			document.getElementById("owfadeout").classList.remove("leftfadeout");
+		}
+		else
+		{
+			document.getElementById("owcurrentpath").style.left = document.getElementById("owcurrentpath").parentElement.offsetWidth-width+"px";
+			document.getElementById("owfadeout").classList.add("leftfadeout");
+		}
+		if(currentOWPath.length > 1)
+		{
+			document.getElementById("owdeletebutton").classList.remove("disabled");
+			document.getElementById("owforkbutton").classList.remove("disabled");
+		}
+		else
+		{
+			document.getElementById("owdeletebutton").classList.add("disabled");
+			document.getElementById("owforkbutton").classList.add("disabled");
+		}
+	};
+
+	window.drawOverworldPath = function(path,detailed,multiline,maxWidth = Infinity)
+	{
+		let s = "",left = 0,top = 0,lastEdgeX,lastEdgeY;
+		for(let k = 0; k < path.length; k++)
+		{
+			switch(k%3)
+			{
+			case 0://Overworld screen
+				if(detailed || k == 0 || k == path.length-1)
+				{
+					if(left+64 > maxWidth && multiline)
+					{
+						left = 32;
+						top += 64;
+					}
+					let screen = overworldScreens.get(path[k]);
+					let name = screen.name,scale = .5,classes = "owscreen single";
+					if(screen.big)
+						scale = .25;
+					let x = screen.special ?0 :screen.id%8*128*scale;
+					let y = screen.special ?0 :(screen.id%0x40 >> 3)*128*scale;
+					let file = screen.special ?screen.file :(screen.darkWorld ?"darkworld" :"lightworld");
+					s += "<div class='"+classes+"' style='left: "+left+"px; top: "+top+"px;'><img class='roomnodeimg' src='./images/overlay/"+file+".png' style='transform: translateX(-"+x+"px) translateY(-"+y+"px) scale("+scale+");'><span class='roomtt'><label class='ttlabel'>"+name+"</label></span></div>";
+					if(k != 0 && path[k-1] != "PO" && path[k-1] != "MI" && path[k-1] != "CO")
+					{
+						let edge = screen.edges.get(path[k-1][0]+path[k-1][1]);
+						let newX = left+edge.x2*128*scale,newY = top+edge.y2*128*scale;
+						s += "<div class='owedgedot' style='left: "+(newX-4)+"px; top: "+(newY-4)+"px;'></div>";
+						if(detailed || path.length <= 4)
+						{
+							let minX = Math.min(lastEdgeX,newX),maxX = Math.max(lastEdgeX,newX);
+							let minY = Math.min(lastEdgeY,newY),maxY = Math.max(lastEdgeY,newY);
+							s += "<div class='crossed"+(((lastEdgeY > newY) != (lastEdgeX > newX)) ?"left" :"right")+"' style='left: "+minX+"px; top: "+minY+"px; width: "+(maxX-minX)+"px; height: "+(maxY-minY)+"px;'></div>"
+						}
+					}
+					if(k != path.length-1 && path[k+1] != "PO" && path[k+1] != "MI" && path[k+1] != "CO")
+					{
+						let edge = screen.edges.get(path[k+1][0]+path[k+1][1]);
+						lastEdgeX = left+edge.x2*128*scale;
+						lastEdgeY = top+edge.y2*128*scale;
+						s += "<div class='owedgedot' style='left: "+(lastEdgeX-4)+"px; top: "+(lastEdgeY-4)+"px;'></div>";
+					}
+					left += 64;
+				}
+				break;
+			case 1://Edge from
+				if(left+32 > maxWidth && multiline)
+				{
+					left = 32;
+					top += 64;
+				}
+				s += createSymbolNode(overworldEdgeToDirection[path[k]],left,top);
+				left += 32;
+				break;
+			case 2://Edge to
+			}
+		}
+		return [s,left,top+64];
+	};
+
+	window.closeOverworldPath = function()
+	{
+		currentOWPath = null;
+		if(outstandingUpdate)
+			sendUpdate();
+		loadOverworld();
+	};
+
+	window.saveOverworldPath = function()
+	{
+		saveCurrentOverworldPath();
+		currentOWPath = null;
+		loadOverworld();
+	};
+
+	window.saveCurrentOverworldPath = function()
+	{
+		for(let k = 3; k < currentOWPath.length; k += 3)
+			if(currentOWPath[k-2] != "PO" && currentOWPath[k-2] != "MI" && currentOWPath[k-2] != "CO")
+			{
+				let screen1 = overworldScreens.get(currentOWPath[k-3]),screen2 = overworldScreens.get(currentOWPath[k]);
+				let edge1 = screen1.edges.get(currentOWPath[k-2]),edge2 = screen2.edges.get(currentOWPath[k-1]);
+				connectSimilarParallel(edge1,edge2);
+			}
+		previousPaths.unshift(currentOWPath);
+		updateMainPathLists();
+		sendUpdate();
+		updateReachableEdges();
+	};
+
+	window.removeLastOverworld = function()
+	{
+		if(currentOWPath.length > 1)
+		{
+			do
+			{
+				currentOWPath.pop();
+			}
+			while(currentOWPath.length%3 != 1);
+			fullOWFixedEdge = null;
+			currentOWScreen = overworldScreens.get(currentOWPath[currentOWPath.length-1]);
+			drawDirectionsFromScreen(currentOWScreen);
+			updateCurrentOverworldPath();
+		}
+	};
+
+	window.forkOverworldPath = function()
+	{
+		if(currentOWPath.length > 1)
+		{
+			saveCurrentOverworldPath();
+			currentOWPath = currentOWPath.slice();
+			do
+			{
+				currentOWPath.pop();
+			}
+			while(currentOWPath.length%3 != 1);
+			fullOWFixedEdge = null;
+			currentOWScreen = overworldScreens.get(currentOWPath[currentOWPath.length-1]);
+			drawDirectionsFromScreen(currentOWScreen);
+			updateCurrentOverworldPath();
+		}
+	};
+
+	window.startOverworldSearch = function(id)
+	{
+		currentOWScreen = overworldScreens.get(id);
+		searchStartScreen = null;
+		searchResults.clear();
+		document.getElementById("owsearchresults").innerHTML = "";
+		hideFullOverworldModal();
+		activeOverworld();
+		switchScene("owsearch");
+		searchOverworldPath(true);
+	};
+
+	window.searchOverworldPath = function(resetRegions)
+	{
+		let screen = currentOWScreen;
+		searchResults.clear();
+		document.getElementById("owsearchtitle").innerHTML = "Paths to "+screen.name;
+		document.getElementById("owsearchstarttext").innerHTML = "Starting from "+(searchStartScreen ?searchStartScreen.name :"common start locations");
+		document.getElementById("owsearchresults").innerHTML = "";
+		hideFullOverworldModal();
+		let items = getModifiedOwnItems();
+		let startRegions = searchStartScreen ?Array.from(searchStartScreen.regions.values()) :fixedStartRegions.concat(customStartRegions);
+		if(searchStartScreen && document.getElementById("owsearchincludecommon").checked)
+			startRegions = startRegions.concat(fixedStartRegions,customStartRegions);
+		for(let region of screen.regions.values())
+		{
+			dijkstra(region,items);
+			let pathsToRegion = [];
+			for(let start of startRegions)
+			{
+				if(start.distance != Infinity)
+				{
+					let current = start;
+					let path = [start.screen.id];
+					while(current.distance > 0)
+					{
+						switch(current.nextEdgeType)
+						{
+							case "S":
+								path.push(current.nextEdge.string,getConnectedEdge(current.nextEdge,false).string,current.nextRegion.screen.id);
+								break;
+							case "P":
+								path.push("PO","PO",current.nextRegion.screen.id);
+								break;
+							case "M":
+								path.push("MI","MI",current.nextRegion.screen.id);
+								break;
+							case "C":
+								path.push("CO","CO",current.nextRegion.screen.id);
+						}
+						current = current.nextRegion;
+					}
+					pathsToRegion.push(path);
+				}
+			}
+			searchResults.set(region,pathsToRegion);
+		}
+		if(resetRegions)
+		{
+			if(searchRegionChoiceVisible = screen.regions.size != 1)
+			{
+				document.getElementById("owsearchregionchoicetext").style.display = "block";
+				let s = "<div id='owanyregion' class='cell buttonbox' onclick='chooseSearchRegion(null)'>Any region</div>";
+				for(let name of screen.regions.keys())
+					s += "<div id='owregion"+name+"' class='cell buttonbox' onclick='chooseSearchRegion(\""+name+"\")'>"+name+"</div>";
+				document.getElementById("owsearchregionchoice").innerHTML = s;
+			}
+			else
+			{
+				document.getElementById("owsearchregionchoicetext").style.display = "none";
+				document.getElementById("owsearchregionchoice").innerHTML = "";
+			}
+			searchRegion = null;
+		}
+		updateSearchResults();
+	};
+
+	window.chooseSearchRegion = function(regionName)
+	{
+		searchRegion = regionName ?currentOWScreen.regions.get(regionName) :null;
+		updateSearchResults();
+	};
+
+	window.updateSearchResults = function()
+	{
+		let paths = [],region = searchRegion;
+		if(region)
+		{
+			for(let path of searchResults.get(region))
+				paths.push(path);
+			if(searchRegionChoiceVisible)
+			{
+				document.getElementById("owanyregion").classList.remove("disabled");
+				for(let r of searchResults.keys())
+					if(r === region)
+						document.getElementById("owregion"+r.name).classList.add("disabled");
+					else
+						document.getElementById("owregion"+r.name).classList.remove("disabled");
+			}
+		}
+		else
+		{
+			for(let list of searchResults.values())
+				for(let path of list)
+					paths.push(path);
+			if(searchRegionChoiceVisible)
+			{
+				document.getElementById("owanyregion").classList.add("disabled");
+				for(let r of searchResults.keys())
+					document.getElementById("owregion"+r.name).classList.remove("disabled");
+			}
+		}
+		for(let k = 0; k < paths.length-1; k++)
+			for(let l = k+1; l < paths.length; l++)
+				if(equalPaths(paths[k],paths[l]))
+				{
+					paths.splice(l,1);
+					l--;
+				}
+		paths.sort((a,b)=>a.length-b.length);
+		document.getElementById("owsearchresultstext").innerHTML = "Search results ("+paths.length+")";
+		document.getElementById("owsearchresults").innerHTML = drawPathList(paths,document.getElementById("compactsearchresults").checked,"search");
+	};
+
+	window.drawPathList = function(paths,compact,listName)
+	{
+		let s = "";
+		for(let k = 0; k < paths.length; k++)
+			s += '<div class="row path" style="margin: 2px 0px;" onclick="showClickOverworldPathModal(event,'+k+',\''+listName+'\',\''+paths[k].join("|")+'\')">'+drawOverworldPath(paths[k],!compact,false)[0]+'</div>';
+		return s;
+	};
+
+	window.pinOverworldPath = function(button)
+	{
+		pinnedPaths.unshift(clickedOverworldPath);
+		outstandingUpdate = true;
+		if(clickedOverworldPathListName !== "search")
+			updateMainPathLists();
+		buttonFlash(button);
+	};
+
+	window.deleteOverworldPath = function()
+	{
+		if(clickedOverworldPathListName === "pinned")
+		{
+			pinnedPaths.splice(clickedOverworldPathIndex,1);
+			outstandingUpdate = true;
+			updateMainPathLists();
+			hideClickOverworldPathModal();
+		}
+		if(clickedOverworldPathListName === "previous")
+		{
+			previousPaths.splice(clickedOverworldPathIndex,1);
+			outstandingUpdate = true;
+			updateMainPathLists();
+			hideClickOverworldPathModal();
+		}
+	};
+
+	window.updateMainPathLists = function()
+	{
+		document.getElementById("owpinnedtext").innerHTML = "Pinned paths ("+pinnedPaths.length+")";
+		document.getElementById("owpinnedpaths").innerHTML = drawPathList(pinnedPaths,document.getElementById("compactpinned").checked,"pinned");
+		document.getElementById("owprevioustext").innerHTML = "Saved explored paths ("+previousPaths.length+")";
+		document.getElementById("owpreviouspaths").innerHTML = drawPathList(previousPaths,document.getElementById("compactprevious").checked,"previous");
+	};
+
+	window.equalPaths = function(path1,path2)
+	{
+		if(path1.length != path2.length)
+			return false;
+		for(let k = 0; k < path1.length; k++)
+			if(path1[k] != path2[k])
+				return false;
+		return true;
+	};
+
+	window.buttonFlash = function(button)
+	{
+		if(button && !button.classList.contains("buttonaction"))
+		{
+			button.classList.add("buttonaction");
+			setTimeout(()=>button.classList.remove("buttonaction"),1000);
+		}
+	};
+
+	window.updateItemTracker = function()
+	{
+		for(let item of ["moonpearl","hammer","hookshot","flippers","mirror","flute","boots","book","lantern","agahnim"])
+			if(ownItems[item])
+				document.getElementById("item"+item).classList.add("collected");
+			else
+				document.getElementById("item"+item).classList.remove("collected");
+		if(ownItems.gloves)
+			if(ownItems.mitts)
+				document.getElementById("itemgloves").classList.add("collected","mitts");
+			else
+			{
+				document.getElementById("itemgloves").classList.add("collected");
+				document.getElementById("itemgloves").classList.remove("mitts");
+			}
+		else
+		{
+			ownItems.mitts = false;
+			document.getElementById("itemgloves").classList.remove("collected","mitts");
+		}
+		for(let item of ["connectortr","connectorhccsanc","connectorboesanc","connectorboehcb","connectorboehcc","connectorsanchcb","connectorsanchcc"])
+			document.getElementById(item).checked = ownItems[item];
+	};
+
+	window.drawFullOverworldPanel = function()
+	{
+		document.getElementById("fullowpaneloverlay").innerHTML = "";
+		let visitedScreenEdges = reachableEdges;
+		let fixedScreen = fullOWConnectorStart ?fullOWConnectorStart :fullOWSelectedScreen;
+		let fixedEdge = fullOverworldMode === "continuepath" ?fullOWFixedEdge :fullOWSelectedEdge;
+		let s = "";
+		for(let [id,screen] of overworldScreens)
+		{
+			let darkWorld = isDarkWorld(screen);
+			if((!sideBySide && darkWorld != drawDarkWorld) || (screen.special && fullOverworldMode === "editflutespots"))
+				continue;
+			let unknownScreen = mixedow && screen.mixedState === "unknown" && fullOverworldMode !== "editflutespots";
+			let scale = .5,classes = "owscreen full",onClick = unknownScreen ?"" :"clickScreenFull("+id+")",valid = true;
+			if(screen.big)
+				classes += " bigscreen";
+			if(screen === fixedScreen)
+				classes += " active";
+			if(fullOWConnectorStart)
+				valid = screen.entranceRegions.length;
+			if(valid && fixedEdge)
+			{
+				valid = false;
+				for(let edge of screen.edges.values())
+					if(edgesCompatible(edge,fixedEdge))
+					{
+						valid = true;
+						break;
+					}
+			}
+			if(!valid)
+				classes += " gray";
+			if(unknownScreen)
+				classes += " unknown";
+			let x = screen.special ?screen.x :id%8*128*scale;
+			let y = screen.special ?screen.y :(id%0x40 >> 3)*128*scale;
+			if(sideBySide && darkWorld != drawDarkWorld)
+				x += 1024*scale;
+			s += "<div class='"+classes+"' onclick='"+onClick+(unknownScreen || (owshuffle === 'N' && !crossedow) ?"' " :"' onmouseover='hoverScreen("+id+")' onmouseout='clearFullOverlay()' ");
+			if(screen.special)
+				s += "style='left: "+x+"px; top: "+y+"px; z-index: 1'><div class='specialshadow'><img class='roomnodeimg' src='./images/overlay/"+screen.file+".png' style='transform: scale("+scale+");'></div>";
+			else
+				s += "style='left: "+x+"px; top: "+y+"px;'><img class='roomnodeimg' src='./images/overlay/"+(screen.darkWorld ?"dark" :"light")+"world.png' style='transform: translateX(-"+x%(1024*scale)+"px) translateY(-"+y+"px) scale("+scale+");'>";
+			s += "<span class='roomtt'>";
+			if(unknownScreen)
+			{
+				let left = getBigScreenSubareaX(screen),top = getBigScreenSubareaY(screen);
+				s += "<span class='fullmixed normal' "+(top ?"style='left: "+(left+4)+"px; top: "+(top+4)+"px;' " :"")+"onclick='clickNormalScreen("+id+")'>Normal</span>";
+				s += "<span class='fullmixed swapped' "+(top ?"style='left: "+(left+4)+"px; top: "+(top+34)+"px;' " :"")+"onclick='clickSwappedScreen("+id+")'>Swapped</span>";
+				s += "</span><span class='questionmark"+(checkableScreens.has(id&0xBF) ?" greentext" :(maybeCheckableScreens.has(id&0xBF) ?" yellowtext" :""))+"'"+(top ?" style='left: "+left+"px; top: "+top+"px;' " :"")+">?";
+			}
+			else
+				s += "<label class='ttlabel'"+(x+y ?"" :" style='line-height: 144px;'")+">"+screen.name+"</label>";
+			s += "</span></div>";
+			if((fullOverworldMode === "editflutespots" || (fluteshuffle && ownItems.flute && document.getElementById("activeflutebox").checked)) && darkWorld === (worldState === 'I') && customFluteSpots.includes(id%0x40))
+				s += "<div class='flutesymbol' style='left: "+(x+getBigScreenSubareaX(screen)+16)+"px; top: "+(y+getBigScreenSubareaY(screen)+16)+"px; opacity: "+(fullOverworldMode === "editflutespots" ?1 :.75)+"'></div>";
+			if(!fullOWConnectorStart && !unknownScreen && (fullOverworldMode !== "editflutespots") && (owshuffle !== 'N' || crossedow))
+				for(let edge of screen.edges.values())
+					if(!fixedEdge || edge === fixedEdge || edgesCompatible(edge,fixedEdge))
+					{
+						classes = "owedge "+className[edge.direction];
+						if(edge === fixedEdge || edge === fullOWSelectedEdge)
+							classes += " active";
+						if(edge.out && darkWorld !== isDarkWorld(edge.out.screen))
+							classes += " owedgecrossed";
+						if(visitedScreenEdges.has(edge))
+							classes += edge.out ?" turqoise" :" green";
+						else
+							classes += edge.out ?" blue" :" red";
+						s += "<div class='"+classes+"' style='left: "+(x+edge.x*128*scale-8)+"px; top: "+(y+edge.y*128*scale-8)+"px;"+(screen.special ?" z-index: 1;" :"")+"'";
+						if(fullOverworldMode === "editedges")
+							s += " onclick='clickEdgeFull("+id+",\""+edge.string+"\")' onmouseover='hoverEdge("+id+",\""+edge.string+"\")' onmouseout='clearFullOverlay()'";
+						s += "></div>";
+					}
+			if(id === 0x18 && !fullOWConnectorStart && ownItems.flute && !document.getElementById("activeflutebox").checked)
+				s += "<span class='activateflute"+(visitedScreenEdges.has(overworldScreens.get(0x18).edges.get("N0")) ?" green" :"")+"' style='left: "+(x+16)+"px; top: "+(y+26)+"px;' onclick='clickFluteActivated()'>Flute activated</span>";
+			if(id === 0x18 && fullOverworldMode === "editedges" && !fullOWConnectorStart && fluteshuffle && customFluteSpots.length != 8 && ownItems.flute && document.getElementById("activeflutebox").checked)
+				s += "<span class='activateflute"+(visitedScreenEdges.has(overworldScreens.get(0x18).edges.get("N0")) ?" green" :"")+"' style='left: "+(x+16)+"px; top: "+(y+26)+"px;' onclick='clickSetFluteSpots()'>Set flute spots</span>";
+			if(id%0x40 === 0x30 && mixedow && !darkWorld)
+				s += "<div class='lightworldsymbol' style='left: "+(x+1)+"px; top: "+(y+47)+"px;'></div>";
+			if(id%0x40 === 0x30 && mixedow && darkWorld)
+				s += "<div class='darkworldsymbol' style='left: "+(x+1)+"px; top: "+(y+47)+"px;'></div>";
+		}
+		document.getElementById("fullowpanelmain").innerHTML = s;
+		if(fullOverworldMode === "editflutespots")
+			document.getElementById("fullowflutespotstext").innerHTML = customFluteSpots.length+"/8 flute spots currently set";
+	};
+
+	window.getBigScreenSubareaX = function(screen)
+	{
+		return screen.big && screen.id%0x40 !== 0x05 ?(screen.id%0x40 === 0x1E || screen.id%0x40 === 0x30 ?64 :32) :0;
+	};
+
+	window.getBigScreenSubareaY = function(screen)
+	{
+		return screen.big ?(screen.id%0x40 === 0x00 || screen.id%0x40 === 0x18 ?64 :32) :0;
+	};
+
+	window.clickNormalScreen = function(id)
+	{
+		setMixedScreen(overworldScreens.get(id),"normal");
+		outstandingUpdate = true;
+		updateReachableEdges();
+		drawFullOverworldPanel();
+	};
+
+	window.clickSwappedScreen = function(id)
+	{
+		setMixedScreen(overworldScreens.get(id),"swapped");
+		outstandingUpdate = true;
+		updateReachableEdges();
+		drawFullOverworldPanel();
+	};
+
+	window.drawSingleOverworldScreen = function(screen,mode)
+	{
+		let visitedScreenEdges = reachableEdges;
+		let s = "";
+		let scale = 1,classes = "bigowscreen single";
+		if(screen.big)
+			scale = .5;
+		let x = screen.special ?0 :screen.id%8*128*scale;
+		let y = screen.special ?0 :(screen.id%0x40 >> 3)*128*scale;
+		let file = screen.special ?screen.file :(screen.darkWorld ?"darkworld" :"lightworld");
+		s += "<div class='"+classes+"' style='left: "+0+"px; top: "+0+"px;'><img class='bigroomnodeimg' src='./images/overlay/"+file+".png' style='transform: translateX(-"+x+"px) translateY(-"+y+"px) scale("+scale+");'></div>";
+		if(mode !== "connector")
+			for(let [edgeString,edge] of screen.edges)
+				if(mode === "alledges" || (edge.direction === extraOWDirection && !edge.water))
+				{
+					classes = "bigowedge "+className[edge.direction];
+					if(visitedScreenEdges.has(edge))
+						classes += edge.out ?" turqoise" :" green";
+					else
+						classes += edge.out ?" blue" :" red";
+					let onClick = mode === "alledges" ?"appendToOverworldPath(\""+edgeString+"\")" :"selectTargetEdge("+edge.symbol+")";
+					s += "<div class='"+classes+"' style='left: "+(edge.x2*128*scale-12)+"px; top: "+(edge.y2*128*scale-12)+"px;' onclick='"+onClick+"'></div>";
+				}
+		return s;
+	};
+
+	window.drawFullEdgeConnection = function(edge1,edge2,x1,y1,opacity)
+	{
+		let scale = .5;
+		let lastEdgeX = x1+edge1.x*128*scale;
+		let lastEdgeY = y1+edge1.y*128*scale;
+		let newX = (edge2.screen.special ?edge2.screen.x :edge2.screen.id%8*128*scale)+edge2.x*128*scale;
+		let newY = (edge2.screen.special ?edge2.screen.y :(edge2.screen.id%0x40 >> 3)*128*scale)+edge2.y*128*scale;
+		if(sideBySide && isDarkWorld(edge2.screen) != drawDarkWorld)
+			newX += 1024*scale;
+		let minX = Math.min(lastEdgeX,newX),maxX = Math.max(lastEdgeX,newX);
+		let minY = Math.min(lastEdgeY,newY),maxY = Math.max(lastEdgeY,newY);
+		return "<div class='crossed"+(((lastEdgeY > newY) != (lastEdgeX > newX)) ?"left" :"right")+"' style='left: "+minX+"px; top: "+minY+"px; width: "+(maxX-minX)+"px; height: "+(maxY-minY)+"px; opacity: "+opacity+";'></div>";
+	};
+
+	window.hoverScreen = function(id)
+	{
+		let screen = overworldScreens.get(id),s = "",scale = .5;
+		let x = screen.special ?screen.x :id%8*128*scale;
+		let y = screen.special ?screen.y :(id%0x40 >> 3)*128*scale;
+		if(sideBySide && isDarkWorld(screen) != drawDarkWorld)
+			x += 1024*scale;
+		for(let edge of screen.edges.values())
+			if(edge.out)
+				s += drawFullEdgeConnection(edge,edge.out,x,y,sideBySide || isDarkWorld(screen) === isDarkWorld(edge.out.screen) ?1 :.5);
+		document.getElementById("fullowpaneloverlay").innerHTML = s;
+	};
+
+	window.hoverEdge = function(id,edgeString)
+	{
+		let screen = overworldScreens.get(id),s = "",scale = .5;
+		let edge = screen.edges.get(edgeString);
+		if(edge.out)
+		{
+			let x = screen.special ?screen.x :id%8*128*scale;
+			let y = screen.special ?screen.y :(id%0x40 >> 3)*128*scale;
+			if(sideBySide && isDarkWorld(screen) != drawDarkWorld)
+				x += 1024*scale;
+			s += drawFullEdgeConnection(edge,edge.out,x,y,sideBySide || isDarkWorld(screen) === isDarkWorld(edge.out.screen) ?1 :.5);
+		}
+		document.getElementById("fullowpaneloverlay").innerHTML = s;
+	};
+
+	window.clearFullOverlay = function()
+	{
+		document.getElementById("fullowpaneloverlay").innerHTML = "";
+	};
+
+	window.showFullOverworldModal = function(mode)
+	{
+		fullOverworldMode = mode;
+		if(mode !== "continuepath")
+		{
+			fullOWFixedEdge = null;
+			if(outstandingUpdate)
+				sendUpdate();
+		}
+		document.getElementById("fullowtitle").innerHTML = fullOWTitle[mode];
+		if(mode === "newpath" || mode === "searchpath")
+			document.getElementById("fullowpanel").classList.add("pointer");
+		else
+			document.getElementById("fullowpanel").classList.remove("pointer");
+		if(mode === "editedges")
+			document.getElementById("fullowpanel").classList.add("clickedges");
+		else
+			document.getElementById("fullowpanel").classList.remove("clickedges");
+		fullOWSelectedScreen = fullOWSelectedEdge = fullOWConnectorStart = null;
+		document.getElementById("fullowscreenactions").style.display = "none";
+		document.getElementById("fullowunknownstate").style.display = mixedow ?"block" :"none";
+		document.getElementById("fullownewconnector").style.display = entranceEnabled && !document.getElementById("connectorsync").checked ?"block" :"none";
+		document.getElementById("fullowedgeactions").style.display = "none";
+		document.getElementById("fullowconnectoractions").style.display = "none";
+		document.getElementById("fullowcommonstarts").style.display = mode === "searchpathstart" ?"block" :"none";
+		document.getElementById("fullowflutespots").style.display = mode === "editflutespots" ?"block" :"none";
+		fullCheckConnectorDetails();
+		drawFullOverworldPanel();
+		document.getElementById("fullowModal").style.display = "block";
+		if(fullZoomAuto)
+			calculateFullZoom();
+	};
+
+	window.hideFullOverworldModal = function()
+	{
+		document.getElementById("fullowModal").style.display = "none";
+		if(fullOWFixedEdge)
+		{
+			while(currentOWPath.length%3 > 1)
+				currentOWPath.pop();
+			updateCurrentOverworldPath();
+		}
+		if(outstandingUpdate)
+			sendUpdate();
+	};
+
+	window.showOverworldConnectorModal = function()
+	{
+		document.getElementById("bigowscreenstartpanel").innerHTML = drawSingleOverworldScreen(fullOWConnectorStart,"connector");
+		document.getElementById("bigowscreenendpanel").innerHTML = drawSingleOverworldScreen(fullOWConnectorEnd,"connector");
+		document.getElementById("connectorstartscreenname").innerHTML = fullOWConnectorStart.name;
+		document.getElementById("connectorendscreenname").innerHTML = fullOWConnectorEnd.name;
+		let s = "";
+		for(let region of fullOWConnectorStart.entranceRegions)
+		{
+			let id = "cstart"+region.name.replace(/\s+/g,"");			
+			s += "<div><label><input type='radio' id='"+id+"' name='connectorstartgroup' value='"+region.name+"' onclick='updateConnectorButton()'>"+region.name+" ("+region.numberEntrances+")</label></div>";
+		}
+		document.getElementById("connectorstartregions").innerHTML = s;
+		if(fullOWConnectorStart.entranceRegions.length === 1)
+			document.getElementById("cstart"+fullOWConnectorStart.entranceRegions[0].name.replace(/\s+/g,"")).checked = true;
+		s = "";
+		for(let region of fullOWConnectorEnd.entranceRegions)
+		{
+			let id = "cend"+region.name.replace(/\s+/g,"");			
+			s += "<div><label><input type='radio' id='"+id+"' name='connectorendgroup' value='"+region.name+"' onclick='updateConnectorButton()'>"+region.name+" ("+region.numberEntrances+")</label></div>";
+		}
+		document.getElementById("connectorendregions").innerHTML = s;
+		if(fullOWConnectorEnd.entranceRegions.length === 1)
+			document.getElementById("cend"+fullOWConnectorEnd.entranceRegions[0].name.replace(/\s+/g,"")).checked = true;
+		document.getElementById("connectorbidirectional").checked = false;
+		updateConnectorButton();
+		document.getElementById("owconnectorModal").style.display = "block";
+	};
+
+	window.hideOverworldConnectorModal = function()
+	{
+		document.getElementById("owconnectorModal").style.display = "none";
+	};
+
+	window.showOverworldExtraModal = function(options)
+	{
+		document.getElementById("bigowscreenpanel").innerHTML = drawSingleOverworldScreen(extraOWScreen,"extra");
+		for(let k = 0; k < 3; k++)
+			if(options[k])
+				document.getElementById("edgebutton"+k).classList.remove("disabled");
+			else
+				document.getElementById("edgebutton"+k).classList.add("disabled");
+		if(extraOWDirection == "N" || extraOWDirection == "S")
+		{
+			document.getElementById("edgebutton0").innerHTML = "Left";
+			document.getElementById("edgebutton2").innerHTML = "Right";
+		}
+		else
+		{
+			document.getElementById("edgebutton0").innerHTML = "Up";
+			document.getElementById("edgebutton2").innerHTML = "Down";
+		}
+		document.getElementById("owextraModal").style.display = "block";
+	};
+
+	window.hideOverworldExtraModal = function()
+	{
+		document.getElementById("owextraModal").style.display = "none";
+		if(fullOWFixedEdge)
+		{
+			while(currentOWPath.length%3 > 1)
+				currentOWPath.pop();
+			updateCurrentOverworldPath();
+		}
+	};
+
+	window.showClickOverworldPathModal = function(event,pathIndex,listName,pathString)
+	{
+		clickedOverworldPathIndex = pathIndex;
+		clickedOverworldPathListName = listName;
+		clickedOverworldPath = pathString.split("|");
+		for(let k = 0; k < clickedOverworldPath.length; k += 3)
+			clickedOverworldPath[k] = parseInt(clickedOverworldPath[k]);
+		let [drawn,,height] = drawOverworldPath(clickedOverworldPath,true,true,352);
+		document.getElementById("currentclickedowpath").style.height = height+"px";
+		document.getElementById("currentclickedowpath").innerHTML = drawn;
+		document.getElementById("saveowpath").style.display = listName === "pinned" ?"none" :"block";
+		document.getElementById("deleteowpath").style.display = listName === "search" ?"none" :"block";
+		document.getElementById("clickOWPathModalMain").style.left = (visibleSidebar ?"64" :"4")+"px";
+		document.getElementById("clickOWPathModalMain").style.top = Math.min(event.clientY-20,window.innerHeight-height-48)+"px";
+		document.getElementById("clickOWPathModal").style.display = "block";
+	};
+
+	window.hideClickOverworldPathModal = function()
+	{
+		document.getElementById("clickOWPathModal").style.display = "none";
+	};
+
+	window.showClickConnectorModal = function(event,index)
+	{
+		clickedConnectorIndex = index;
+		let connector = entranceConnectors[index];
+		let regionStart = overworldScreens.get(connector.data[0]).regions.get(connector.data[1]),regionEnd = overworldScreens.get(connector.data[2]).regions.get(connector.data[3]);
+		let s = regionStart.screen.name;
+		if(regionStart.screen.entranceRegions.length != 1)
+			s += " - "+regionStart.name;
+		document.getElementById("currentclickedconnectorstart").innerHTML = "Start: "+s;
+		s = regionEnd.screen.name;
+		if(regionEnd.screen.entranceRegions.length != 1)
+			s += " - "+regionEnd.name;
+		document.getElementById("currentclickedconnectorend").innerHTML = "End: "+s;
+		document.getElementById("currentclickedconnectordirections").innerHTML = "Direction(s): "+(connector.status === "both" ?"Both" :(connector.status === "unknown" ?"Unknown (treated as one)" :"One"));
+		if(connector.status === "single")
+			document.getElementById("clickedconnectorone").classList.add("disabled");
+		else
+			document.getElementById("clickedconnectorone").classList.remove("disabled");
+		if(connector.status === "both")
+			document.getElementById("clickedconnectortwo").classList.add("disabled");
+		else
+			document.getElementById("clickedconnectortwo").classList.remove("disabled");
+		if(connector.status === "unknown")
+			document.getElementById("clickedconnectorunknown").classList.add("disabled");
+		else
+			document.getElementById("clickedconnectorunknown").classList.remove("disabled");
+		document.getElementById("clickedconnectordelete").style.display = document.getElementById("connectorsync").checked ?"none" :"block";
+		document.getElementById("clickconnectorModalMain").style.left = (visibleSidebar ?"64" :"4")+"px";
+		document.getElementById("clickconnectorModalMain").style.top = Math.min(event.clientY-20,window.innerHeight-144)+"px";
+		document.getElementById("clickconnectorModal").style.display = "block";
+	};
+
+	window.hideClickConnectorModal = function()
+	{
+		document.getElementById("clickconnectorModal").style.display = "none";
+	};
+
+	window.updateConnectorButton = function()
+	{
+		if(document.querySelector("input[name='connectorstartgroup']:checked") && document.querySelector("input[name='connectorendgroup']:checked"))
+			document.getElementById("saveconnector").classList.remove("disabled");
+		else
+			document.getElementById("saveconnector").classList.add("disabled");
+	};
+
+	window.switchFullOverworld = function()
+	{
+		drawDarkWorld = !drawDarkWorld;
+		drawFullOverworldPanel();
+	};
+
+	window.toggleSideBySide = function()
+	{
+		sideBySide = !sideBySide;
+		if(fullZoomAuto)
+			calculateFullZoom();
+		drawFullOverworldPanel();
+	};
+
+	window.zoomAutoFullOverworld = function(checkbox)
+	{
+		fullZoomAuto = checkbox.checked;
+		if(fullZoomAuto)
+			calculateFullZoom();
+	};
+
+	window.zoomOutFullOverworld = function()
+	{
+		fullZoomAuto = document.getElementById("zoomautoow").checked = false;
+		if(fullZoom > .5)
+		{
+			fullZoom = Math.ceil(fullZoom*20-.0001)/20-.05;
+			applyFullOverworldZoom(fullZoom);
+			document.getElementById("zoominow").classList.remove("disabled");
+			if(fullZoom <= .5)
+				document.getElementById("zoomoutow").classList.add("disabled");
+			else
+				document.getElementById("zoomoutow").classList.remove("disabled");
+		}
+	};
+
+	window.zoomInFullOverworld = function()
+	{
+		fullZoomAuto = document.getElementById("zoomautoow").checked = false;
+		if(fullZoom < 1.5)
+		{
+			fullZoom = Math.floor(fullZoom*20+.0001)/20+.05;
+			applyFullOverworldZoom(fullZoom);
+			document.getElementById("zoomoutow").classList.remove("disabled");
+			if(fullZoom >= 1.5)
+				document.getElementById("zoominow").classList.add("disabled");
+			else
+				document.getElementById("zoominow").classList.remove("disabled");
+		}
+	};
+
+	window.resizeHandler = function()
+	{
+		document.getElementById("sidebysideowtext").innerHTML = document.body.clientWidth < 424 ?"Both" :"Side by side";
+		document.getElementById("zoomautoowtext").innerHTML = document.body.clientWidth < 424 ?"Auto" :"Auto zoom";
+		if(fullZoomAuto && document.getElementById("fullowModal").style.display != "none")
+			calculateFullZoom();
+	};
+
+	window.calculateFullZoom = function()
+	{
+		let maxWidth = document.body.clientWidth-14,maxHeight = window.innerHeight-216;
+		if(sideBySide)
+			maxWidth /= 2;
+		let size = Math.max(256,Math.min(Math.min(maxWidth,maxHeight),768));
+		fullZoom = size/512;
+		applyFullOverworldZoom(fullZoom);
+		if(fullZoom <= .5)
+			document.getElementById("zoomoutow").classList.add("disabled");
+		else
+			document.getElementById("zoomoutow").classList.remove("disabled");
+		if(fullZoom >= 1.5)
+			document.getElementById("zoominow").classList.add("disabled");
+		else
+			document.getElementById("zoominow").classList.remove("disabled");
+	};
+
+	window.applyFullOverworldZoom = function(zoom)
+	{
+		document.getElementById("fullowpanel").style.width = 512*(sideBySide ?2 :1)*zoom+"px";
+		document.getElementById("fullowpanelrow").style.height = 512*zoom+"px";
+		document.getElementById("fullowpanel").style.transform = "scale("+zoom+")";
+	};
+
+	window.getModifiedOwnItems = function()
+	{
+		let items = Object.assign({},ownItems);
+		if(!document.getElementById("activeflutebox").checked)
+			items.flute = false;
+		if(doorshuffle === 'N')
+		{
+			items.connectorboesanc = true;
+			items.connectorboehcb = items.connectorboehcc = items.connectorsanchcb = items.connectorsanchcc = false;
+		}
+		if(!items.gloves)
+		{
+			items.connectorboesanc = items.connectorboehcb = items.connectorboehcc = false;
+		}
+		return items;
+	};
+
+	window.updateReachableEdges = function()
+	{
+		let items = getModifiedOwnItems();
+		checkableScreens.clear();
+		maybeCheckableScreens.clear();
+		continueRegions.clear();
+		fixedStartRegions = new Set();
+		let visitedRegions = new Set(),visitedScreenEdges = new Set();
+		if(document.getElementById("pinnedlinkshouse").checked)
+			inspectStartRegion(0x2C,"Main",true);
+		if(document.getElementById("pinnedsanctuary").checked)
+			inspectStartRegion(0x13,"Main",true);
+		if(document.getElementById("pinnedoldman").checked)
+			inspectStartRegion(0x03,"Bottom",false);
+		if(document.getElementById("pinnedpyramid").checked)
+			inspectStartRegion(0x5B,"Balcony",false);
+		if(items.flute)
+			for(let id of fluteshuffle ?customFluteSpots :[0x03,0x16,0x18,0x2C,0x2F,0x30,0x3B,0x3F])
+				inspectStartRegion(id,null,false);
+		fixedStartRegions = Array.from(fixedStartRegions);
+		let startRegions = fixedStartRegions.concat(customStartRegions);
+		for(let start of startRegions)
+			if(!visitedRegions.has(start) && (!mixedow || start.screen.mixedState !== "unknown"))
+				explore(start,items,visitedRegions,visitedScreenEdges,checkableScreens,continueRegions,emptyMap);
+		if(mixedow && checkableScreens.size != 0)
+		{//Find more checkable screens (bad algorithm, but works well enough to be useful)
+			let assumedScreens = new Set();
+			let nextScreens = checkableScreens;
+			let cr = new Map(continueRegions);
+			let mcr = new Map();
+			let maybeMode = false;
+			while(nextScreens.size != 0)
+			{
+				let cs = Array.from(nextScreens);
+				nextScreens = new Set();
+				for(let id of cs)
+				{
+					if(assumedScreens.has(id))
+						continue;
+					let assumptions = new Map();
+					let regionsAssumeNormal = new Set(visitedRegions),regionsAssumeSwapped = new Set(visitedRegions);
+					let edgesAssumeNormal = new Set(visitedScreenEdges),edgesAssumeSwapped = new Set(visitedScreenEdges);
+					let checkableAssumeNormal = new Set(checkableScreens),checkableAssumeSwapped = new Set(checkableScreens);
+					let continueAssumeNormal = new Map(),continueAssumeSwapped = new Map();
+					let group = getScreenLinkGroup(id);
+					for(let n of group)
+						assumedScreens.add(n);
+					for(let n of group)
+						assumptions.set(n,"normal");
+					for(let n of group)
+						if(cr.has(n+" normal"))
+							for(let start of cr.get(n+" normal"))
+								explore(start,items,regionsAssumeNormal,edgesAssumeNormal,checkableAssumeNormal,continueAssumeNormal,assumptions);
+					for(let n of group)
+						assumptions.set(n,"swapped");
+					for(let n of group)
+						if(cr.has(n+" swapped"))
+							for(let start of cr.get(n+" swapped"))
+								explore(start,items,regionsAssumeSwapped,edgesAssumeSwapped,checkableAssumeSwapped,continueAssumeSwapped,assumptions);
+					let diffNormal = setDifference(checkableAssumeNormal,new Set()),diffSwapped = setDifference(checkableAssumeSwapped,new Set());
+					let commonCheckable = setIntersection(diffNormal,diffSwapped);
+					let maybeCheckable = setUnion(checkableAssumeNormal,checkableAssumeSwapped);
+					if(!maybeMode)
+						for(let c of commonCheckable)
+						{
+							nextScreens.add(c);
+							if(!cr.has(c+" normal"))
+								cr.set(c+" normal",new Set());
+							if(!cr.has(c+" swapped"))
+								cr.set(c+" swapped",new Set());
+							let crNormal = cr.get(c+" normal"),crSwapped = cr.get(c+" swapped");
+							let normalSize = crNormal.size,swappedSize = crSwapped.size;
+							let commonNormal = setIntersection(continueAssumeNormal.get(c+" normal"),continueAssumeSwapped.get(c+" normal"));
+							for(let region of commonNormal)
+								crNormal.add(region);
+							let commonSwapped = setIntersection(continueAssumeNormal.get(c+" swapped"),continueAssumeSwapped.get(c+" swapped"));
+							for(let region of commonSwapped)
+								crSwapped.add(region);
+							if(crNormal.size != normalSize || crSwapped.size != swappedSize)
+								assumedScreens.delete(c);
+						}
+					for(let c of maybeCheckable)
+					{
+						(maybeMode ?nextScreens :maybeCheckableScreens).add(c);
+						if(!mcr.has(c+" normal"))
+							mcr.set(c+" normal",new Set());
+						if(!mcr.has(c+" swapped"))
+							mcr.set(c+" swapped",new Set());
+						let crNormal = mcr.get(c+" normal"),crSwapped = mcr.get(c+" swapped");
+						let normalSize = crNormal.size,swappedSize = crSwapped.size;
+						let commonNormal = setUnion(continueAssumeNormal.get(c+" normal"),continueAssumeSwapped.get(c+" normal"));
+						for(let region of commonNormal)
+							crNormal.add(region);
+						let commonSwapped = setUnion(continueAssumeNormal.get(c+" swapped"),continueAssumeSwapped.get(c+" swapped"));
+						for(let region of commonSwapped)
+							crSwapped.add(region);
+						if(crNormal.size != normalSize || crSwapped.size != swappedSize)
+							assumedScreens.delete(c);
+					}
+				}
+				if(nextScreens.size == 0)
+				{
+					if(maybeMode)
+					{
+						for(let n of assumedScreens)
+							maybeCheckableScreens.add(n);
+					}
+					else
+					{
+						for(let n of assumedScreens)
+							checkableScreens.add(n);
+						assumedScreens.clear();
+						cr = mcr;
+						maybeMode = true;
+						nextScreens = maybeCheckableScreens;
+					}
+				}
+			}
+		}
+		let c = 0;
+		for(let edge of visitedScreenEdges)
+			if(!edge.out)
+				c++;
+		if(owshuffle !== 'N' || crossedow)
+		{
+			document.getElementById("sidesummaryow").innerHTML = c;
+			document.getElementById("summaryow").innerHTML = c;
+		}
+		else
+		{
+			document.getElementById("sidesummaryow").innerHTML = "";
+			document.getElementById("summaryow").innerHTML = "";
+		}
+		reachableEdges = visitedScreenEdges;
+	};
+
+	window.inspectStartRegion = function(screenID,regionName,ignoreSwaps)
+	{
+		let screen = overworldScreens.get(screenID);
+		if(mixedow)
+		{
+			if(screen.mixedState === "unknown")
+			{
+				let id = screenID&0xBF;
+				checkableScreens.add(id);
+				let keyNormal = id+" normal",keySwapped = id+" swapped";
+				if(!continueRegions.has(keyNormal))
+					continueRegions.set(keyNormal,new Set());
+				if(!continueRegions.has(keySwapped))
+					continueRegions.set(keySwapped,new Set());
+				let region = regionName ?screen.regions.get(regionName) :screen.fluteRegion;
+				continueRegions.get(keyNormal).add(worldState !== 'I' ?region :region.parallel);
+				continueRegions.get(keySwapped).add(ignoreSwaps !== (worldState === 'I') ?region :region.parallel);
+			}
+			else
+			{
+				let region = regionName ?screen.regions.get(regionName) :screen.fluteRegion;
+				fixedStartRegions.add((ignoreSwaps || screen.mixedState === "normal") !== (worldState === 'I') ?region :region.parallel);
+			}
+		}
+		else
+		{
+			let region = regionName ?screen.regions.get(regionName) :screen.fluteRegion;
+			fixedStartRegions.add(worldState === 'I' ?region.parallel :region);
+		}
 	};
 }(window));
