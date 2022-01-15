@@ -21,12 +21,16 @@
 	window.rightClickedLocation = -1;
 	window.rightClickedType = null;
 
+	window.entranceNameToIndex = {};
+	window.entranceIndexToName = {};
+	window.entranceNameToFriendlyName = {};
+	window.entranceNameToGroup = {};
 	window.dungeonNames = ["EP", "DP", "ToH", "PoD", "SP", "SW", "TT", "IP", "MM", "TR", "GT"];
+	window.constantFunctions = {};
+	window.dungeonEntranceCounts = [1, 4, 1, 1, 1, 8, 1, 1, 1, 4, 1, 5, 1];
 
 	window.doorWindow = null;
 	window.dungeonData = null;
-
-	var standardbombs = false;
 
     // Event of clicking on the item tracker
     window.toggle = function(label) {
@@ -144,14 +148,7 @@
 					lastItem = label;
 				else
 					lastItem = null;
-				if (label != 'bomb') {
-					nodes.forEach(node=>node.classList[items[label] ? 'add' : 'remove'](is_boss ? 'defeated' : 'active'));
-				} else {
-					if (standardbombs) {
-						//Because you always have bombs...except in Standard
-						nodes.forEach(node=>node.classList[items[label] ? 'add' : 'remove'](is_boss ? 'defeated' : 'active'));
-					}
-				}
+				nodes.forEach(node=>node.classList[items[label] ? 'add' : 'remove'](is_boss ? 'defeated' : 'active'));
 			} else {
 				if (label === 'sword' && flags.swordmode === 'S') {
 				} else {
@@ -163,7 +160,7 @@
 					if (value)
 						lastItem = label + " active-" + value;
 					else				
-						lastItem = null;					
+						lastItem = null;
 				}
 			}
 			// Initiate bunny graphics!
@@ -172,6 +169,29 @@
 			}
 		}
         if (flags.mapmode != 'N') {
+			updateLocationAvailability();
+			
+            // Clicking a boss on the tracker will check it off on the map!
+            if (is_boss) {
+                toggle_boss(label.substring(4));
+			}
+			if (label === 'agahnim') {
+                toggle_boss('12');
+			}
+        }
+		
+		//Update the backgrounds of the chests in entrance
+		for (var k = 0; k < dungeons.length; k++) {
+			document.getElementById('chest'+k).style.backgroundColor = 'white';
+		}
+
+		if(doorWindow && !doorWindow.closed)
+			doorWindow.postMessage(cloneItems(),"*");
+    };
+
+	window.updateLocationAvailability = function()
+	{
+		if(flags.mapmode != 'N') {
             for (var k = 0; k < chests.length; k++) {
                 if (!chests[k].is_opened)
                     document.getElementById('locationMap'+k).className = 'location ' + chests[k].is_available();
@@ -197,48 +217,88 @@
 						document.getElementById('dungeon'+k).className = 'dungeon ' + dungeons[k].can_get_chest();
 				}
 			}
-			
-            // Clicking a boss on the tracker will check it off on the map!
-            if (is_boss) {
-                toggle_boss(label.substring(4));
-			}
-			if (label === 'agahnim') {
-                toggle_boss('12');
-			}
 			toggle_agahnim();
-        }
-		
-		//Update the backgrounds of the chests in entrance
-		for (var k = 0; k < dungeons.length; k++) {
-			document.getElementById('chest'+k).style.backgroundColor = 'white';// (flags.entrancemode != 'N' ? getDungeonBackground(dungeons[k].can_get_chest()) : 'white');
 		}
-
-		if(doorWindow && !doorWindow.closed)
-			doorWindow.postMessage(cloneItems(),"*");
-    };
+	};
 
 	window.receiveMessage = function(event)
 	{
 		if(window.origin === event.origin)
 		{
-			if(event.data == "UPDATE" && doorWindow && !doorWindow.closed)
-				doorWindow.postMessage(dungeonData,"*");
-			else
-				if(event.data == "ITEMS" && doorWindow && !doorWindow.closed)
-					doorWindow.postMessage(cloneItems(),"*");
-				else
-					if((""+event.data).startsWith("TOGGLE "))
+			if(event.data.logic && flags.overworldshuffle != 'N')
+			{
+				if(event.data.helpDesert && doorCheck(1,false,false,false,[(!flags.wildkeys && flags.gametype != 'R') || !flags.wildbigkeys ? 'boots' : '','firesource','killbomb'],'connector') === "available")
+					event.data.items[48] = event.data.items[48] === "darkpossible" ?"darkavailable" :"available";
+				if(event.data.helpMimic && doorCheck(9,false,true,false,['somaria','firerod',(!flags.wildkeys && flags.gametype != 'R') || !flags.wildbigkeys ? 'laserbridge' : '','bomb'],'connector') === "available")
+					event.data.items[4] = event.data.items[4] === "darkpossible" ?"darkavailable" :"available";
+				for(var k = 0; k < chests.length; k++)
+					chests[k].is_available = constantFunctions[event.data[flags.entrancemode === 'N' ?"items" :"entranceitems"][k]];
+				for(var k = 0; k < dungeons.length; k++)
+				{
+					var dungeonEntrances = new Array(dungeonEntranceCounts[k]),dungeonEntrancesBunny = new Array(dungeonEntranceCounts[k]);
+					for(var l = 0; l < dungeonEntrances.length; l++)
 					{
-						let item = (""+event.data).substring(7);
-						if(items.hasOwnProperty(item))
-						{
-							click_map();
-							toggle(item);
-						}
+						dungeonEntrances[l] = event.data.dungeons[k*8+l];
+						dungeonEntrancesBunny[l] = event.data.dungeonsBunny[k*8+l];
 					}
+					dungeons[k].is_beatable = constantFunctions[dungeonBoss(k,dungeonEntrances,dungeonEntrancesBunny)];
+					dungeons[k].can_get_chest = constantFunctions[dungeonChests(k,dungeonEntrances,dungeonEntrancesBunny)];
+				}
+				agahnim.is_available = dungeons[12].is_beatable;
+				if(flags.entrancemode != 'N')
+					for(var k = 0; k < entrances.length; k++)
+						entrances[k].is_available = constantFunctions[event.data.entrances[k]];
+				updateLocationAvailability();
+			}
+			else
+				if(event.data == "PING" && doorWindow && !doorWindow.closed)
+					doorWindow.postMessage("PONG","*");
+				else
+					if(event.data == "UPDATE" && doorWindow && !doorWindow.closed)
+						doorWindow.postMessage(dungeonData,"*");
 					else
-						if(event.data.dungeonPaths && event.data.dungeonPaths.length === 13)
-							dungeonData = event.data;
+						if(event.data == "ITEMS" && doorWindow && !doorWindow.closed)
+							doorWindow.postMessage(cloneItems(),"*");
+						else
+							if(event.data == "RESETLOGIC" && flags.overworldshuffle != 'N' && doorWindow && !doorWindow.closed)
+							{
+								var olddungeons = dungeons;
+								var oldagahnim = agahnim;
+								var oldchests = chests;
+								var oldentrances = flags.entrancemode === 'N' ?null :entrances;
+								loadChestFlags();
+								for(var k = 0; k < dungeons.length; k++)
+								{
+									olddungeons[k].is_beatable = dungeons[k].is_beatable;
+									olddungeons[k].can_get_chest = dungeons[k].can_get_chest;
+								}
+								oldagahnim.is_available = agahnim.is_available;
+								for(var k = 0; k < chests.length; k++)
+									oldchests[k].is_available = chests[k].is_available;
+								dungeons = olddungeons;
+								agahnim = oldagahnim;
+								chests = oldchests;
+								if(flags.entrancemode != 'N')
+								{
+									for(var k = 0; k < entrances.length; k++)
+										oldentrances[k].is_available = entrances[k].is_available;
+									entrances = oldentrances;
+								}
+								updateMapTracker();
+							}
+							else
+								if((""+event.data).startsWith("TOGGLE "))
+								{
+									var item = (""+event.data).substring(7);
+									if(items.hasOwnProperty(item))
+									{
+										click_map();
+										toggle(item);
+									}
+								}
+								else
+									if(event.data.dungeonPaths && event.data.dungeonPaths.length === 13)
+										dungeonData = event.data;
 		}
 	};
 
@@ -250,7 +310,7 @@
 		{
 			var url = 'dungeontracker.html?door_shuffle='+flags.doorshuffle+'&overworld_shuffle='+flags.overworldshuffle;
 			url += '&wild_keys='+flags.wildkeys+'&wild_big_keys='+flags.wildbigkeys+'&world_state='+flags.gametype;
-			url += '&entrance_shuffle='+flags.entrancemode+(dungeonData ?'&request_update=true' :'');
+			url += '&entrance_shuffle='+flags.entrancemode+(dungeonData ?'&request_update=true' :(flags.overworldshuffle === 'N' ?'' :'&init_sync=true'));
 			doorWindow = window.open(url,'','width=444,height=700,titlebar=0,menubar=0,toolbar=0,scrollbars=1,resizable=1');
 		}
 	};
@@ -259,6 +319,9 @@
 	{
 		var newItems = Object.assign({},items);
 		newItems.inc = newItems.dec = null;
+		newItems.flags = flags;
+		newItems.prizes = prizes;
+		newItems.medallions = medallions;
 		newItems.connectorOne = connectorOne;
 		newItems.connectorTwo = connectorTwo;
 		return newItems;
@@ -295,15 +358,6 @@
 
         document.getElementById('dungeonPrize'+n).className = 'prize-' + prizes[n];
 
-        if (flags.mapmode != 'N' && flags.entrancemode === 'N') {
-            // Update Sahasralah, Fat Fairy, and Master Sword Pedestal
-            var pendant_chests = [25, 61, 62];
-            for (var k = 0; k < pendant_chests.length; k++) {
-                if (!chests[pendant_chests[k]].is_opened)
-                    document.getElementById('locationMap'+pendant_chests[k]).className = 'location ' + chests[pendant_chests[k]].is_available();
-            }
-        }
-		
 		updateMapTracker();
     };
 	
@@ -314,14 +368,6 @@
 
         document.getElementById('dungeonPrize'+n).className = 'prize-' + prizes[n];
 
-        if (flags.mapmode != 'N' && flags.entrancemode === 'N') {
-            // Update Sahasralah, Fat Fairy, and Master Sword Pedestal
-            var pendant_chests = [25, 61, 62];
-            for (var k = 0; k < pendant_chests.length; k++) {
-                if (!chests[pendant_chests[k]].is_opened)
-                    document.getElementById('locationMap'+pendant_chests[k]).className = 'location ' + chests[pendant_chests[k]].is_available();
-            }
-        }
 		updateMapTracker();
     };	
 	
@@ -329,12 +375,11 @@
     // event of right clicking on a boss's enemizer portrait
     window.rightClickEnemy = function(n) {
         enemizer[n] -= 1;
-        if (enemizer[n] === -1) enemizer[n] = 10;
+        if (enemizer[n] === -1) enemizer[n] = flags.wildcompasses ? 11 : 10;
         document.getElementById('dungeonEnemy'+n).className = 'enemizer-' + enemizer[n];
 		dungeons[n].is_beatable();
 		if (!dungeons[n].is_beaten)
 			if (document.getElementById('bossMap'+n) != null) {
-				//document.getElementById('bossMap'+n).className = 'boss ' + dungeons[n].is_beatable();
 				document.getElementById('bossMap'+n).className = 'bossprize-' + prizes[n] + ' boss ' + dungeons[n].is_beatable();
 			}
     };
@@ -342,12 +387,11 @@
     // event of clicking on a boss's enemizer portrait
     window.toggle_enemy = function(n) {
         enemizer[n] += 1;
-        if (enemizer[n] === 11) enemizer[n] = 0;
+        if (enemizer[n] === (flags.wildcompasses ? 12 : 11)) enemizer[n] = 0;
         document.getElementById('dungeonEnemy'+n).className = 'enemizer-' + enemizer[n];
 		dungeons[n].is_beatable();
 		if (!dungeons[n].is_beaten)
 			if (document.getElementById('bossMap'+n) != null) {
-				//document.getElementById('bossMap'+n).className = 'boss ' + dungeons[n].is_beatable();
 				document.getElementById('bossMap'+n).className = 'bossprize-' + prizes[n] + ' boss ' + dungeons[n].is_beatable();
 			}
     };
@@ -400,36 +444,7 @@
 			}
         }
 		
-        if (flags.mapmode != 'N') {
-            for (var k = 0; k < chests.length; k++) {
-                if (!chests[k].is_opened)
-                    document.getElementById('locationMap'+k).className = 'location ' + chests[k].is_available();
-            }
-            if (flags.entrancemode != 'N') {
-				for (var k = 0; k < entrances.length; k++) {
-					if (!entrances[k].is_opened) {
-						var entrancetype = '';
-						if (entrances[k].is_available()) {
-							if (entrances[k].known_location != '') {
-								entrancetype = isDungeon(entrances[k].known_location) ? 'dungeon' : 'keylocation';
-							} else if (entrances[k].is_connector) {
-								entrancetype = 'connector';
-							}
-						}
-						document.getElementById('entranceMap'+k).className = 'entrance ' + entrances[k].is_available() + entrancetype;
-					}
-				}
-			} else {
-	            for (var k = 0; k < dungeons.length; k++) {
-	                if (!dungeons[k].is_beaten)
-	                    document.getElementById('bossMap'+k).className = 'bossprize-' + prizes[k] + ' boss ' + dungeons[k].is_beatable();
-						if (items['chest'+k])
-							document.getElementById('dungeon'+k).className = 'dungeon ' + dungeons[k].can_get_chest();
-				}
-			}
-
-			toggle_agahnim();
-        }		
+		updateMapTracker();
 	};
 	
 	window.clickCompass = function(dungeonid) {
@@ -543,7 +558,7 @@
 	window.rightClickEntrance = function(n) {
 		$('#entranceModal').show();
 		document.getElementById('entranceID').value = n;
-		document.getElementById('entranceModalTitle').innerHTML = entrances[n].caption;
+		document.getElementById('entranceModalTitle').innerHTML = entrances[n].caption.replace(/\s?\{[^}]+\}/g, '');
 		document.getElementById('entranceModalNote').value = entrances[n].note;
 		document.getElementById('ConnectorListSpan').innerHTML = '';
 		var entrancecount = 0;
@@ -569,7 +584,7 @@
 		}
 		
 		if (entrancecount > 2) {
-			document.getElementById('addConnectorSpan').style.visibility = 'collapse';			
+			document.getElementById('addConnectorSpan').style.visibility = 'collapse';
 		} else {
 			document.getElementById('addConnectorSpan').style.visibility = 'visible';
 		}
@@ -612,12 +627,12 @@
 		document.getElementById('rupee').style.backgroundColor = '#000';
 		document.getElementById('shop').style.backgroundColor = '#000';
 		document.getElementById('dark').style.backgroundColor = '#000';
-		document.getElementById('connector').style.backgroundColor = '#000';		
+		document.getElementById('connector').style.backgroundColor = '#000';
 		document.getElementById('bomb').style.backgroundColor = '#000';
 		document.getElementById('bumper').style.backgroundColor = '#000';
 		document.getElementById('spike').style.backgroundColor = '#000';
-		document.getElementById('hook').style.backgroundColor = '#000';		
-		document.getElementById('dam').style.backgroundColor = '#000';		
+		document.getElementById('hook').style.backgroundColor = '#000';
+		document.getElementById('dam').style.backgroundColor = '#000';
 		
 		if (entrances[n].known_location != '') {
 			document.getElementById(entrances[n].known_location).style.backgroundColor = '#00F';
@@ -739,6 +754,91 @@
 		}
 	}
 	
+	window.LoadEntranceSummary = function(index = -1) {
+		$('#summaryModal').show();
+
+		for (var i = 0; i < 2; i++) {
+			if (index < 0 || i === index) {
+				var includeCleared = document.getElementById('summaryCleared'+i).checked;
+
+				switch (document.getElementById('summaryFilter'+i).value) {
+					case 'knownconnectors':
+						var entrancesummary = '';
+						
+						for (var j = 0; j < connectorIndex.length; j++) {
+							if (includeCleared || !entrances[connectorOne[j]].is_opened || !entrances[connectorTwo[j]].is_opened) {
+								entrancesummary += '<div>' + entrances[connectorOne[j]].caption + ' <--> ' + entrances[connectorTwo[j]].caption + '</div>';
+							}
+						}
+						
+						document.getElementById('summaryDiv'+i).innerHTML = entrancesummary.replace(/\s?\{[^}]+\}/g, '');
+						break;
+					default:
+						var locations = [];
+						var locationsummary = '';
+						var lastGroup = '';
+						
+						for (var j = 0; j < entrances.length; j++) {
+							if ((entrances[j].known_location != '' || entrances[j].note != '') && (includeCleared || !entrances[j].is_opened)) {
+								switch (document.getElementById('summaryFilter'+i).value) {
+									case 'all':
+										pushLocationObject(locations, entrances[j]);
+										break;
+									case 'dungeons':
+										if (isDungeon(entrances[j].known_location)) {
+											pushLocationObject(locations, entrances[j]);
+										}
+										break;
+									case 'starts':
+										if (entranceNameToGroup[entrances[j].known_location] === 'start') {
+											pushLocationObject(locations, entrances[j]);
+										}
+										break;
+									case 'keylocations':
+										if (entranceNameToGroup[entrances[j].known_location].endsWith('key')) {
+											pushLocationObject(locations, entrances[j]);
+										}
+										break;
+									case 'shopschests':
+										if (entrances[j].known_location === 'magic' || entrances[j].known_location === 'bomb' || entrances[j].known_location === 'shop' || entrances[j].known_location === 'chest') {
+											pushLocationObject(locations, entrances[j]);
+										}
+										break;
+									case 'unknownconnectors':
+										if (entrances[j].known_location === 'dark' || entrances[j].known_location === 'connector') {
+											pushLocationObject(locations, entrances[j]);
+										}
+										break;
+									case 'notes':
+										if (entrances[j].note != '') {
+											pushLocationObject(locations, entrances[j]);
+										}
+								}
+							}
+						}
+			
+						locations.sort((a, b) => a.index - b.index);
+						
+						for (var j = 0; j < locations.length; j++) {
+							locationsummary += (lastGroup != '' && lastGroup != locations[j].group ? '<div class="separatortop">' : '<div>') + locations[j].friendly + ': ' + locations[j].location + (locations[j].note == '' ? '' : ' ['+locations[j].note+']') + '</div>';
+							lastGroup = locations[j].group;
+						}
+						
+						document.getElementById('summaryDiv'+i).innerHTML = locationsummary.replace(/\s?\{[^}]+\}/g, '');
+						document.getElementById('summaryDiv'+i).scrollTop = 0;
+				}
+			}
+		}
+	}
+	
+	window.pushLocationObject = function(locations, entrance) {
+		locations.push({'index': entranceNameToIndex[entrance.known_location], 'friendly': getFriendlyName(entrance.known_location), 'group': entranceNameToGroup[entrance.known_location], 'location': entrance.caption, 'note': entrance.note});
+	}
+	
+	window.hideSummaryModal = function() {
+		$('#summaryModal').hide();
+	}
+	
 	window.tagEntrance = function(n, t) {
 		document.getElementById('hc_m').style.backgroundColor = '#000';
 		document.getElementById('hc_w').style.backgroundColor = '#000';
@@ -832,16 +932,6 @@
         document.getElementById('medallion'+n).className = 'medallion-' + medallions[n];
 
         if (flags.mapmode != "N") {
-            // Update availability of dungeon boss AND chests
-            dungeons[8+n].is_beaten = !dungeons[8+n].is_beaten;
-            toggle_boss(8+n);
-            if (items['chest'+(8+n)] > 0 && document.getElementById('dungeon'+(8+n)) != null)
-                document.getElementById('dungeon'+(8+n)).className = 'dungeon ' + dungeons[8+n].can_get_chest();
-            // TRock medallion affects Mimic Cave
-            if (n === 1) {
-                chests[4].is_opened = !chests[4].is_opened;
-                toggle_chest(4);
-            }
             // Change the mouseover text on the map
             dungeons[8+n].caption = dungeons[8+n].caption.replace(/\{medallion\d+\}/, '{medallion'+medallions[n]+'}');
 			updateMapTracker();
@@ -856,16 +946,6 @@
         document.getElementById('medallion'+n).className = 'medallion-' + medallions[n];
 
         if (flags.mapmode != "N") {
-            // Update availability of dungeon boss AND chests
-            dungeons[8+n].is_beaten = !dungeons[8+n].is_beaten;
-            toggle_boss(8+n);
-            if (items['chest'+(8+n)] > 0 && document.getElementById('dungeon'+(8+n)) != null)
-                document.getElementById('dungeon'+(8+n)).className = 'dungeon ' + dungeons[8+n].can_get_chest();
-            // TRock medallion affects Mimic Cave
-            if (n === 1) {
-                chests[4].is_opened = !chests[4].is_opened;
-                toggle_chest(4);
-            }
             // Change the mouseover text on the map
             dungeons[8+n].caption = dungeons[8+n].caption.replace(/\{medallion\d+\}/, '{medallion'+medallions[n]+'}');
 			updateMapTracker();
@@ -1055,169 +1135,64 @@
     //}
 
 	window.getFriendlyName = function(x) {
-		var friendly = '';
-		
-		switch (x) {
-			case 'hc_m':
-				friendly = 'Hyrule Castle (Main)';
-				break;
-			case 'hc_w':
-				friendly = 'Hyrule Castle (West)';
-				break;
-			case 'hc_e':
-				friendly = 'Hyrule Castle (East)';
-				break;
-			case 'ct':
-				friendly = 'Castle Tower';
-				break;
-			case 'ep':
-				friendly = 'Eastern Palace';
-				break;
-			case 'dp_m':
-				friendly = 'Desert Palace (Main)';
-				break;
-			case 'dp_w':
-				friendly = 'Desert Palace (West)';
-				break;
-			case 'dp_e':
-				friendly = 'Desert Palace (East)';
-				break;
-			case 'dp_n':
-				friendly = 'Desert Palace (North)';
-				break;
-			case 'toh':
-				friendly = 'Tower of Hera';
-				break;
-			case 'pod':
-				friendly = 'Palace of Darkness';
-				break;
-			case 'sp':
-				friendly = 'Swamp Palace';
-				break;
-			case 'sw':
-				friendly = 'Skull Woods (Back)';
-				break;
-			case 'tt':
-				friendly = 'Thieve\'s Town';
-				break;
-			case 'ip':
-				friendly = 'Ice Palace';
-				break;
-			case 'mm':
-				friendly = 'Misery Mire';
-				break;
-			case 'tr_m':
-				friendly = 'Turtle Rock (Main)';
-				break;
-			case 'tr_w':
-				friendly = 'Turtle Rock (West)';
-				break;
-			case 'tr_e':
-				friendly = 'Turtle Rock (East)';
-				break;
-			case 'tr_b':
-				friendly = 'Turtle Rock (Back)';
-				break;
-			case 'link':
-				friendly = 'Link\'s House';
-				break;
-			case 'sanc':
-				friendly = 'Sanctuary';
-				break;
-			case 'mount':
-				friendly = 'Death Mountain (Start)';
-				break;
-			case 'chest':
-				friendly = 'Room/Cave w/ Chest';
-				break;
-			case 'gt':
-				friendly = 'Ganon\'s Tower';
-				break;
-			case 'ganon':
-				friendly = 'Ganon';
-				break;
-			case 'magic':
-				friendly = 'Magic Shop';
-				break;
-			case 'kid':
-				friendly = 'Lazy Kid';
-				break;
-			case 'smith':
-				friendly = 'Swordsmiths';
-				break;
-			case 'bat':
-				friendly = 'Magic Bat';
-				break;
-			case 'library':
-				friendly = 'Library';
-				break;
-			case 'sahas':
-				friendly = 'Sahasrahla\'s Hut';
-				break;
-			case 'mimic':
-				friendly = 'Mimic Cave';
-				break;
-			case 'rupee':
-				friendly = 'Rupee Cave';
-				break;
-			case 'shop':
-				friendly = 'Shop';
-				break;
-			case 'dark':
-				friendly = 'Dark Cave';
-				break;
-			case 'bomb':
-				friendly = 'Bomb Shop';
-				break;
-			case 'bumper':
-				friendly = 'Bumper Cave';
-				break;
-			case 'spike':
-				friendly = 'Spike Cave';
-				break;
-			case 'hook':
-				friendly = 'Hookshot Cave';
-				break;
-			case 'connector':
-				friendly = 'Unknown Connector';
-				break;			
-			case 'dam':
-				friendly = 'Dam';
-				break;
-		}
-		
-		return friendly;
+		return entranceNameToFriendlyName[x];
+	}
+
+	window.defineEntranceTypes = function() {
+		defineEntranceType(0, 'lwdungeon', 'hc_m', 'Hyrule Castle (Main)');
+		defineEntranceType(1, 'lwdungeon', 'hc_w', 'Hyrule Castle (West)');
+		defineEntranceType(2, 'lwdungeon', 'hc_e', 'Hyrule Castle (East)');
+		defineEntranceType(3, 'lwdungeon', 'ct', 'Castle Tower');
+		defineEntranceType(4, 'lwdungeon', 'ep', 'Eastern Palace');
+		defineEntranceType(5, 'lwdungeon', 'dp_m', 'Desert Palace (Main)');
+		defineEntranceType(6, 'lwdungeon', 'dp_w', 'Desert Palace (West)');
+		defineEntranceType(7, 'lwdungeon', 'dp_e', 'Desert Palace (East)');
+		defineEntranceType(8, 'lwdungeon', 'dp_n', 'Desert Palace (North)');
+		defineEntranceType(9, 'lwdungeon', 'toh', 'Tower of Hera');
+		defineEntranceType(10, 'dwdungeon', 'pod', 'Palace of Darkness');
+		defineEntranceType(11, 'dwdungeon', 'sp', 'Swamp Palace');
+		defineEntranceType(12, 'dwdungeon', 'sw', 'Skull Woods (Back)');
+		defineEntranceType(13, 'dwdungeon', 'tt', 'Thieve\'s Town');
+		defineEntranceType(14, 'dwdungeon', 'ip', 'Ice Palace');
+		defineEntranceType(15, 'dwdungeon', 'mm', 'Misery Mire');
+		defineEntranceType(16, 'dwdungeon', 'tr_m', 'Turtle Rock (Main)');
+		defineEntranceType(17, 'dwdungeon', 'tr_w', 'Turtle Rock (West)');
+		defineEntranceType(18, 'dwdungeon', 'tr_e', 'Turtle Rock (East)');
+		defineEntranceType(19, 'dwdungeon', 'tr_b', 'Turtle Rock (Back)');
+		defineEntranceType(20, 'dwdungeon', 'gt', 'Ganon\'s Tower');
+		defineEntranceType(21, 'dwdungeon', 'ganon', 'Ganon');
+		defineEntranceType(22, 'start', 'link', 'Link\'s House');
+		defineEntranceType(23, 'start', 'sanc', 'Sanctuary');
+		defineEntranceType(24, 'start', 'mount', 'Death Mountain (Start)');
+		defineEntranceType(25, 'lwkey', 'magic', 'Magic Shop');
+		defineEntranceType(26, 'lwkey', 'kid', 'Lazy Kid');
+		defineEntranceType(27, 'lwkey', 'smith', 'Swordsmiths');
+		defineEntranceType(28, 'lwkey', 'bat', 'Magic Bat');
+		defineEntranceType(29, 'lwkey', 'library', 'Library');
+		defineEntranceType(30, 'lwkey', 'sahas', 'Sahasrahla\'s Hut');
+		defineEntranceType(31, 'lwkey', 'mimic', 'Mimic Cave');
+		defineEntranceType(32, 'lwkey', 'dam', 'Dam');
+		defineEntranceType(33, 'dwkey', 'bomb', 'Bomb Shop');
+		defineEntranceType(34, 'dwkey', 'bumper', 'Bumper Cave');
+		defineEntranceType(35, 'dwkey', 'spike', 'Spike Cave');
+		defineEntranceType(36, 'dwkey', 'hook', 'Hookshot Cave');
+		defineEntranceType(37, 'generalkey', 'rupee', 'Rupee Cave');
+		defineEntranceType(38, 'generalkey', 'shop', 'Shop');
+		defineEntranceType(39, 'generalkey', 'dark', 'Dark Cave');
+		defineEntranceType(40, 'generalkey', 'connector', 'Unknown Connector');
+		defineEntranceType(41, 'generalkey', 'chest', 'Room/Cave w/ Chest');
+		defineEntranceType(1000, 'null', '', '???');
+	}
+
+	window.defineEntranceType = function(index, group, name, friendlyName) {
+		entranceNameToIndex[name] = index;
+		entranceIndexToName[index] = name;
+		entranceNameToFriendlyName[name] = friendlyName;
+		entranceNameToGroup[name] = group;
 	}
 
 	window.isDungeon = function(x) {
-		switch (x) {
-			case 'hc_m':
-			case 'hc_w':
-			case 'hc_e':
-			case 'ct':
-			case 'ep':
-			case 'dp_m':
-			case 'dp_w':
-			case 'dp_e':
-			case 'dp_n':
-			case 'toh':
-			case 'pod':
-			case 'sp':
-			case 'sw':
-			case 'tt':
-			case 'ip':
-			case 'mm':
-			case 'tr_m':
-			case 'tr_w':
-			case 'tr_e':
-			case 'tr_b':
-			case 'gt':
-			case 'ganon':
-				return true;
-				break;
-		}
-		
-		return false;
+		return entranceNameToGroup[x].endsWith('dungeon');
 	}
 	
 	window.findItems = function(items) {
@@ -1293,22 +1268,19 @@
 	};
 
 	window.unhighlightAll = function() {
-		//if(spoilerLoaded)
+		if(flags.mapmode != 'N')
 		{
-			if(flags.mapmode != 'N')
-			{
-				for(var i = 0; i < chests.length; i++)
-					document.getElementById('locationMap'+i).classList.remove('highlight');
-				if (flags.entrancemode != 'N') {
-					for(var i = 0; i < entrances.length; i++)
-						document.getElementById('entranceMap'+i).classList.remove('highlight');
-				}
-				else
-					for(var i = 0; i < dungeons.length; i++)
-						document.getElementById('dungeon'+i).classList.remove('highlight');
+			for(var i = 0; i < chests.length; i++)
+				document.getElementById('locationMap'+i).classList.remove('highlight');
+			if (flags.entrancemode != 'N') {
+				for(var i = 0; i < entrances.length; i++)
+					document.getElementById('entranceMap'+i).classList.remove('highlight');
 			}
-            document.getElementById('caption').innerHTML = '&nbsp;';
+			else
+				for(var i = 0; i < dungeons.length; i++)
+					document.getElementById('dungeon'+i).classList.remove('highlight');
 		}
+		document.getElementById('caption').innerHTML = '&nbsp;';
 	};
 	
 	window.showNiceItems = function(x) {
@@ -1320,7 +1292,6 @@
 	};
 
 	window.clearCaption = function() {
-		//if(spoilerLoaded)
 		document.getElementById('caption').innerHTML = '&nbsp;';
 	};
 
@@ -1524,6 +1495,9 @@
 				document.getElementById('dungeonEnemy9').style.visibility = 'hidden';
 				for (var k = 0; k < dungeons.length; k++) {
 					enemizer[k] = k + 1;
+					if (k < 10) {
+						document.getElementById('dungeonEnemy' + k).className = 'enemizer-' + (k + 1);
+					}
 				}
 			} else {
 				document.getElementById('dungeonEnemy0').style.visibility = 'inherit';
@@ -1535,9 +1509,12 @@
 				document.getElementById('dungeonEnemy6').style.visibility = 'inherit';
 				document.getElementById('dungeonEnemy7').style.visibility = 'inherit';
 				document.getElementById('dungeonEnemy8').style.visibility = 'inherit';
-				document.getElementById('dungeonEnemy9').style.visibility = 'inherit';				
+				document.getElementById('dungeonEnemy9').style.visibility = 'inherit';
 				for (var k = 0; k < dungeons.length; k++) {
 					enemizer[k] = 0;
+					if (k < 10) {
+						document.getElementById('dungeonEnemy' + k).className = 'enemizer-0';
+					}
 				}
 			}
 		}
@@ -1796,18 +1773,23 @@
 			rightClickChest('chest12');
 			toggle('chest12');
 			
+			if (!document.getElementById('shuffledmaps').checked) {
+				for (var k = 0; k < 10; k++) {
+					if (prizes[k] == 5) {
+						prizes[k] = 0;
+						document.getElementById('dungeonPrize'+k).className = 'prize-0';
+					}
+				}
+			}
 			
-			/* document.getElementById('chest0').innerHTML = (items.chest0 > 0 ? items.chest0 : '');
-			document.getElementById('chest1').innerHTML = (items.chest1 > 0 ? items.chest1 : '');
-			document.getElementById('chest2').innerHTML = (items.chest2 > 0 ? items.chest2 : '');
-			document.getElementById('chest3').innerHTML = (items.chest3 > 0 ? items.chest3 : '');
-			document.getElementById('chest4').innerHTML = (items.chest4 > 0 ? items.chest4 : '');
-			document.getElementById('chest5').innerHTML = (items.chest5 > 0 ? items.chest5 : '');
-			document.getElementById('chest6').innerHTML = (items.chest6 > 0 ? items.chest6 : '');
-			document.getElementById('chest7').innerHTML = (items.chest7 > 0 ? items.chest7 : '');
-			document.getElementById('chest8').innerHTML = (items.chest8 > 0 ? items.chest8 : '');
-			document.getElementById('chest9').innerHTML = (items.chest9 > 0 ? items.chest9 : '');
-			document.getElementById('chest10').innerHTML = (items.chest10 > 0 ? items.chest10 : ''); */
+			if (!document.getElementById('shuffledcompasses').checked) {
+				for (var k = 0; k < 10; k++) {
+					if (enemizer[k] == 11) {
+						enemizer[k] = 0;
+						document.getElementById('dungeonEnemy'+k).className = 'enemizer-0';
+					}
+				}
+			}
 			
 			if (!document.getElementById('shuffledbigkeys').checked) {
 				if (!items.bigkey0) toggle('bigkey0');
@@ -1836,7 +1818,7 @@
 				document.getElementById('bigkey10').style.visibility = 'hidden';
 				document.getElementById('bigkeyhalf0').style.visibility = 'hidden';
 				document.getElementById('bigkeyhalf1').style.visibility = 'hidden';
-			} else {
+			} else if (document.getElementById('shuffledbigkeys').checked != flags.wildbigkeys) {
 				if (items.bigkey0) toggle('bigkey0');
 				if (items.bigkey1) toggle('bigkey1');
 				if (items.bigkey2) toggle('bigkey2');
@@ -1881,7 +1863,7 @@
 					items.smallkeyhalf0 = 0;
 					items.smallkeyhalf1 = 0;
 				}
-			} else {// if (flags.gametype != 'R') {
+			} else {
 				items.smallkey0 = flags.doorshuffle === 'C' ? 29 : 0;
 				items.smallkey1 = flags.doorshuffle === 'C' ? 29 : 1;
 				items.smallkey2 = flags.doorshuffle === 'C' ? 29 : 1;
@@ -2007,7 +1989,7 @@
 				document.getElementById("c8skdiv").classList.remove('hidden');
 				document.getElementById('chest9').classList.remove('large');
 				document.getElementById("c9bkdiv").classList.remove('hidden');
-				document.getElementById("c9skdiv").classList.remove('hidden');				
+				document.getElementById("c9skdiv").classList.remove('hidden');
 			}
 			
 			flags.wildmaps = document.getElementById('shuffledmaps').checked;
@@ -2073,6 +2055,10 @@
 		
 		//Entrance
 		if (document.getElementById('entranceselect').value != flags.entrancemode || adjustForEntrance) {
+			if (doorWindow && !doorWindow.closed) {
+				doorWindow.postMessage("MYSTERYRELOAD","*");
+			}
+			
 			var currentURL = window.location.href;
 			
 			if (document.getElementById('entranceselect').value === "N") {
@@ -2083,9 +2069,9 @@
 				}
 			}
 			
-			var fParam = currentURL.substr(currentURL.indexOf("f=") + 2, 29);
+			var fParam = currentURL.substr(currentURL.indexOf("f=") + 2, 30);
 			
-			var replaceParam = flags.gametype + document.getElementById('entranceselect').value + flags.bossshuffle + flags.enemyshuffle + flags.glitches + flags.itemplacement + flags.goals + flags.opentower + flags.opentowercount + flags.ganonvuln + flags.ganonvulncount + flags.swordmode + (flags.invertedactivatedflute ? '1' : '0') + flags.mapmode + flags.spoilermode + flags.spheresmode + 'Y' + 'N' + (flags.wildmaps ? '1' : '0') + (flags.wildcompasses ? '1' : '0') + (flags.wildkeys ? '1' : '0') + (flags.wildbigkeys ? '1' : '0') + flags.ambrosia + flags.overworldshuffle + flags.autotracking + flags.trackingport;
+			var replaceParam = flags.gametype + document.getElementById('entranceselect').value + flags.bossshuffle + flags.enemyshuffle + flags.glitches + flags.itemplacement + flags.goals + flags.opentower + flags.opentowercount + flags.ganonvuln + flags.ganonvulncount + flags.swordmode + (flags.invertedactivatedflute ? '1' : '0') + flags.mapmode + flags.spoilermode + flags.spheresmode + 'Y' + 'N' + (flags.wildmaps ? '1' : '0') + (flags.wildcompasses ? '1' : '0') + (flags.wildkeys ? '1' : '0') + (flags.wildbigkeys ? '1' : '0') + flags.ambrosia + flags.overworldshuffle + flags.shopsanity + flags.autotracking + flags.trackingport;
 
 			currentURL = currentURL.replace(fParam, replaceParam);
 			
@@ -2128,196 +2114,23 @@
             return items[item] = value;
         };
     }
-	
-	function compactMapMenu()
-	{
-		return '<table style="color: white;">'+
-'	<tr>'+
-'		<td colspan="7">'+
-'			Light World Dungeons'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/hc_m.png" style="cursor: pointer;" onclick="tagEntrance(\'hc_m\', true)" id="hc_m" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/hc_w.png" style="cursor: pointer;" onclick="tagEntrance(\'hc_w\', true)" id="hc_w" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/hc_e.png" style="cursor: pointer;" onclick="tagEntrance(\'hc_e\', true)" id="hc_e" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/ct.png" style="cursor: pointer;" onclick="tagEntrance(\'ct\', true)" id="ct" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/ep.png" style="cursor: pointer;" onclick="tagEntrance(\'ep\', true)" id="ep" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/dp_m.png" style="cursor: pointer;" onclick="tagEntrance(\'dp_m\', true)" id="dp_m" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/dp_w.png" style="cursor: pointer;" onclick="tagEntrance(\'dp_w\', true)" id="dp_w" />'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/dp_e.png" style="cursor: pointer;" onclick="tagEntrance(\'dp_e\', true)" id="dp_e" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/dp_n.png" style="cursor: pointer;" onclick="tagEntrance(\'dp_n\', true)" id="dp_n" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/toh.png" style="cursor: pointer;" onclick="tagEntrance(\'toh\', true)" id="toh" />'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td colspan="7">'+
-'			Light World Key Locations'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/magic.png" style="cursor: pointer;" onclick="tagEntrance(\'magic\', false)" id="magic" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/kid.png" style="cursor: pointer;" onclick="tagEntrance(\'kid\', false)" id="kid" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/smith.png" style="cursor: pointer;" onclick="tagEntrance(\'smith\', false)" id="smith" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/bat.png" style="cursor: pointer;" onclick="tagEntrance(\'bat\', false)" id="bat" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/library.png" style="cursor: pointer;" onclick="tagEntrance(\'library\', false)" id="library" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/sahas.png" style="cursor: pointer;" onclick="tagEntrance(\'sahas\', false)" id="sahas" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/mimic.png" style="cursor: pointer;" onclick="tagEntrance(\'mimic\', false)" id="mimic" />'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/dam.png" style="cursor: pointer;" onclick="tagEntrance(\'dam\', false)" id="dam" />'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td colspan="7">'+
-'			General Key Locations'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/rupee.png" style="cursor: pointer;" onclick="tagEntrance(\'rupee\', false)" id="rupee" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/shop.png" style="cursor: pointer;" onclick="tagEntrance(\'shop\', false)" id="shop" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/dark.png" style="cursor: pointer;" onclick="tagEntrance(\'dark\', false)" id="dark" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/connector.png" style="cursor: pointer;" onclick="tagEntrance(\'connector\', false)" id="connector" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/chest.png" style="cursor: pointer;" onclick="tagEntrance(\'chest\', false)" id="chest" />'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td colspan="7">'+
-'			Starting Locations'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/link.png" style="cursor: pointer;" onclick="tagEntrance(\'link\', true)" id="link" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/sanc.png" style="cursor: pointer;" onclick="tagEntrance(\'sanc\', true)" id="sanc" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/mount.png" style="cursor: pointer;" onclick="tagEntrance(\'mount\', true)" id="mount" />'+
-'		</td>							'+
-'		'+
-'		<td>'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td colspan="7">'+
-'			Dark World Dungeons'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/pod.png" style="cursor: pointer;" onclick="tagEntrance(\'pod\', true)" id="pod" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/sp.png" style="cursor: pointer;" onclick="tagEntrance(\'sp\', true)" id="sp" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/sw.png" style="cursor: pointer;" onclick="tagEntrance(\'sw\', true)" id="sw" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/tt.png" style="cursor: pointer;" onclick="tagEntrance(\'tt\', true)" id="tt" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/ip.png" style="cursor: pointer;" onclick="tagEntrance(\'ip\', true)" id="ip" />'+
-'		</td>		'+
-'		<td>'+
-'			<img src="./images/interface/mm.png" style="cursor: pointer;" onclick="tagEntrance(\'mm\', true)" id="mm" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/tr_m.png" style="cursor: pointer;" onclick="tagEntrance(\'tr_m\', true)" id="tr_m" />'+
-'		</td>					'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/tr_w.png" style="cursor: pointer;" onclick="tagEntrance(\'tr_w\', true)" id="tr_w" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/tr_e.png" style="cursor: pointer;" onclick="tagEntrance(\'tr_e\', true)" id="tr_e" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/tr_b.png" style="cursor: pointer;" onclick="tagEntrance(\'tr_b\', true)" id="tr_b" />'+
-'		</td>							'+
-'		<td>'+
-'			<img src="./images/interface/gt.png" style="cursor: pointer;" onclick="tagEntrance(\'gt\', true)" id="gt" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/ganon.png" style="cursor: pointer;" onclick="tagEntrance(\'ganon\', true)" id="ganon" />'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td colspan="7">'+
-'			Dark World Key Locations'+
-'		</td>'+
-'	</tr>'+
-'	<tr>'+
-'		<td>'+
-'			<img src="./images/interface/bomb.png" style="cursor: pointer;" onclick="tagEntrance(\'bomb\', false)" id="bomb" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/bumper.png" style="cursor: pointer;" onclick="tagEntrance(\'bumper\', false)" id="bumper" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/spike.png" style="cursor: pointer;" onclick="tagEntrance(\'spike\', false)" id="spike" />'+
-'		</td>'+
-'		<td>'+
-'			<img src="./images/interface/hook.png" style="cursor: pointer;" onclick="tagEntrance(\'hook\', false)" id="hook" />'+
-'		</td>'+
-'	</tr>'+
-'</table>';
-	}
-	
-	
 
     window.start = function() {
 		//If spoiler mode, first show the modal to load the spoiler log
 		if (flags.spoilermode === 'Y') {
 			$('#spoilerModal').show();
+		}
+		
+		if (flags.entrancemode != 'N') {
+			defineEntranceTypes();
+			document.getElementById('summaryFilter0').value = 'all';
+			document.getElementById('summaryFilter1').value = 'knownconnectors';
+			document.getElementById('summaryCleared0').checked = false;
+			document.getElementById('summaryCleared1').checked = false;
+		}
+		
+		for (const a of ["unavailable","available","possible","information","darkavailable","darkpossible","partialavailable","opened"]) {
+			constantFunctions[a] = ()=>a;
 		}
 		
 		if (flags.opentower === 'R') {
@@ -2346,7 +2159,8 @@
 			case 'O':
 				document.getElementById('ganondiv').classList.add('other');
 				break;
-		}		
+		}
+		
 		//Default the dungeon prizes and enemizer defaults
         for (var k = 0; k < dungeons.length; k++) {
             prizes[k] = 0;
@@ -2391,21 +2205,13 @@
             for (k = 0; k < chests.length; k++) {
                 document.getElementById('locationMap'+k).className = 'location ' + (chests[k].is_opened ? 'opened' : chests[k].is_available());
             }
-			if (flags.entrancemode === 'N') {
-				document.getElementById('bossMapAgahnim').className = 'boss';
-				document.getElementById('castle').className = 'castle ' + agahnim.is_available();
-				for (k = 0; k < dungeons.length; k++) {
-					document.getElementById('bossMap'+k).className = 'boss ' + dungeons[k].is_beatable();
-					document.getElementById('dungeon'+k).className = 'dungeon ' + dungeons[k].can_get_chest();
-				}
-			}
+			
 			if (flags.mapmode === 'C') {
 				var link = document.createElement("link");
 				link.rel = 'stylesheet';
 				link.type = 'text/css';
 				link.href = flags.entrancemode === 'N' ? 'css/smallmap.css' : 'css/entrancesmallmap.css'; //Not changeable in mystery mode!
 				document.head.appendChild(link);
-				//document.getElementById('spheres').style.display = 'none';
 				
 				if (flags.entrancemode != 'N') {
 					var modal = document.getElementById("entranceModal"),modalMain = document.getElementById("entranceModalMain");
@@ -2415,8 +2221,6 @@
 					modalMain.style.height = "600px";
 					modalMain.style.left = "20px";
 					modalMain.style.top = "36px";
-					var modalTags = document.getElementById("modalTags");
-					modalTags.innerHTML = compactMapMenu();
 				}				
 			}
         } else {
@@ -2468,6 +2272,11 @@
 				document.getElementById('bossMap10').style.top = "52.5%";
 				document.getElementById('dungeon10').style.left = "25%";
 				document.getElementById('dungeon10').style.top = "52.5%";
+					
+				document.getElementById('bossMap12').style.left = "79.0%";
+				document.getElementById('bossMap12').style.top = flags.mapmode === 'C' ? "7.2%" : "5.5%";
+				document.getElementById('dungeon12').style.left = "79.0%";
+				document.getElementById('dungeon12').style.top = flags.mapmode === 'C' ? "7.2%" : "5.5%";
 			} else {
 				window.document.getElementById('locationMap1').style.visibility = 'hidden';
 				window.document.getElementById('entranceMap10').style.top = "40.0%";
@@ -2534,6 +2343,16 @@
 				document.getElementById('bossMap12').style.visibility = 'hidden';
 				document.getElementById('dungeon12').style.visibility = 'hidden';
 			}
+		}
+
+		//Hide shops outside of Shopsanity
+		if (flags.entrancemode === 'N') {
+			if (flags.shopsanity === 'N') {
+				for (var k = 67; k < 79; k++) {
+					document.getElementById('locationMap'+k).style.visibility = 'hidden';
+				}
+			}
+			document.getElementById('locationMap78').style.visibility = 'hidden';//Bomb Shop not randomized yet
 		}
 		
 		//If all keys are not shuffled, change the chest styles
@@ -2632,11 +2451,9 @@
 		else
 			window.addEventListener("message", receiveMessage, false);
 		
-		standardbombs = true;
-		if (flags.gametype != 'S') {
+		//if (flags.gametype != 'S') {
 			toggle('bomb');
-			standardbombs = false;
-		}
+		//}
 		
 		if (flags.entrancemode === 'N') {			
 			for (var i = 0; i < 10; i++) {

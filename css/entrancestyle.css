@@ -185,7 +185,8 @@ body {
 .possible { background-color: yellow; }
 .information { background-color: orange; }
 .darkavailable { background-color: blue; }
-.darkpossible { background-color: purple; } 
+.darkpossible { background-color: purple; }
+.partialavailable { background-color: rgb(23, 170, 238); }
 .opened { background-color: #7f7f7f; opacity: 0.5; }
 .hidden { width: 0px!important; height: 0px!important; }
 
@@ -372,6 +373,7 @@ body {
 .enemizer-8 { background-image: url(../images/dungeons/boss7.png); background-size: 32px; }
 .enemizer-9 { background-image: url(../images/dungeons/boss8.png); background-size: 32px; }
 .enemizer-10 { background-image: url(../images/dungeons/boss9.png); background-size: 32px; }
+.enemizer-11 { background-image: url(../images/dungeons/compass.png); background-size: 32px; }
 .prize-0 { background-image: url(../images/dungeons/prize0.png); }
 .prize-1 { background-image: url(../images/dungeons/prize1.png); }
 .prize-2 { background-image: url(../images/dungeons/prize2.png); }
@@ -399,6 +401,8 @@ body {
 .pendant-2 { background-image: url(../images/overlay/pendant2.png); }
 
 .noitem { background-image: url(../images/dungeons/prize0.png); opacity: .25; }
+
+.separatortop { border-top: 1px dotted gray; margin-top: -1px; }
 
 #bossMap0, #dungeon0 { left: 46.8%; top: 38.8%; }
 #bossMap1, #dungeon1 { left: 3.8%;  top: 78.4%; }
@@ -437,6 +441,13 @@ body {
 #locationMap20 { left: 47.7%; top: 17.3%; z-index: 2; }
 #locationMap21 { left: 14.4%; top: 66.2%; z-index: 2; }
 #locationMap22 { left: 2.5%;  top: 3.2%; z-index: 2; }
+
+#entranceModalLightWorld { width: 276px; float: left; }
+#entranceModalGeneral { width: 222px; float: left; }
+#entranceModalDarkWorld { width: 276px; float: left; }
+
+#summaryModal { width: 884px; left: 456px; }
+#summaryModalMain { width: 800px; height: 300px; left: 40px; top: 50px; }
 
 #entranceMap0 { left: 28%; top: 72%; z-index: 2; }
 #entranceMap1 { left: 24.5%; top: 67%; z-index: 2; }
