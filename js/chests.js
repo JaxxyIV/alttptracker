@@ -39,11 +39,11 @@
 	}
 	
     function melee() { return items.sword || items.hammer; }
-    function melee_bow() { return melee() || items.bow > 0; }
+    function melee_bow() { return melee() || items.bow > 1; }
     function cane() { return items.somaria || items.byrna; }
     function rod() { return items.firerod || items.icerod; }
     function canHitSwitch() { return items.bomb || melee_bow() || cane() || rod() || items.boomerang || items.hookshot; }
-    function agatowerweapon() { return items.sword > 0 || items.somaria || items.bow > 0 || items.hammer || items.firerod || (items.byrna && (items.bottle > 0 || items.magic)); }
+    function agatowerweapon() { return items.sword > 0 || items.somaria || items.bow > 1 || items.hammer || items.firerod || (items.byrna && (items.bottle > 0 || items.magic)); }
     function always() { return 'available'; }
 
 	function can_reach_outcast() {
@@ -81,7 +81,7 @@
 
 	function activeFlute()
 	{
-		return items.flute && (canReachLightWorld() || flags.invertedactivatedflute);
+		return items.flute && (canReachLightWorld() || flags.activatedflute);
 	}
 	
 	function canSpinSpeed()
@@ -1362,14 +1362,23 @@
 							return 'darkpossible';
 						return doorcheck;
 					}
-					if (!(items.glove || activeFlute())) return 'unavailable';
+					if (!items.somaria) return 'unavailable';
 					//First, check for back door access through mirror, it has logic priority
 					if (items.mirror && ((items.hookshot && items.moonpearl) || (items.glove === 2))) {
 						return window.TRBackBoss();
 					//If not, go through normal front door access
 					} else {
 						if (!items.bigkey9 || medallionCheck(1) === 'unavailable') return 'unavailable';
-						return window.TRFrontBoss(medallion_check(1));//Note: This assumes the key layout allows for clearing it in this direction
+						var frontcheck = window.TRFrontBoss(medallion_check(1));
+						if (frontcheck === 'available') {
+							//Only list as fully available if both front and back entrances are available
+							if (items.glove === 2 && items.mirror) {
+								return 'available';
+							} else {
+								return 'possible';
+							}
+						}
+						return frontcheck;
 					}
 				},
 				can_get_chest: function() {
@@ -1391,10 +1400,18 @@
 						return window.TRBackChests();
 					//If not, go through normal front door access
 					} else {
-						if (medallionCheck(1) === 'unavailable') return 'unavailable';
-						//var state = medallionCheck(1);
-						//if (state) return state;
-						return window.TRFrontChests(medallion_check(1));//Note: This assumes the key layout allows for clearing it in this direction
+						if (medallionCheck(1) === 'unavailable' || !items.somaria) return 'unavailable';
+						var frontcheck = medallion_check(1);
+						if (frontcheck === 'available') {
+							//Only list as fully available if both front and back entrances are available
+							if (items.glove === 2 && items.mirror) {
+								return 'available';
+							} else {
+								return 'possible';
+							}
+						}
+						return frontcheck;
+						//return window.TRFrontChests(medallion_check(1));//Note: This assumes the key layout allows for clearing it in this direction
 					}
 				}
 			}, { // [10]
@@ -1490,9 +1507,9 @@
 						return window.doorCheck(12,!items.lantern && !activeFlute(),true,true,[],'boss');
 					}
 					if (flags.wildkeys) {
-						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 0))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) && (items.smallkeyhalf1 === 2 || flags.gametype == 'R') ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
+						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 1))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) && (items.smallkeyhalf1 === 2 || flags.gametype == 'R') ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
 					} else {
-						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 0))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';					
+						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 1))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';					
 					}
 				}
 			};
@@ -1635,7 +1652,7 @@
 				caption: 'Hookshot Cave (bottom chest) {hookshot}/{boots}',
 				is_opened: false,
 				is_available: function() {
-					return items.glove && (items.boots || items.hookshot) ?
+					return (items.boots || items.hookshot) && (items.glove || (items.mirror && (items.moonpearl || items.glove === 2))) ?
 						(items.lantern || activeFlute() ? 'available' : 'darkavailable') :
 						'unavailable';
 				}
@@ -1643,7 +1660,7 @@
 				caption: 'Hookshot Cave (3 top chests) {hookshot}',
 				is_opened: false,
 				is_available: function() {
-					return items.glove && items.hookshot ?
+					return items.hookshot && (items.glove || (items.mirror && (items.moonpearl || items.glove === 2))) ?
 						(items.lantern || activeFlute() ? 'available' : 'darkavailable') :
 						'unavailable';
 				}
@@ -1681,7 +1698,7 @@
 				caption: 'Gary\'s Lunchbox (save the frog first)',
 				is_opened: false,
 				is_available: function() {
-					return (items.mirror || items.glove === 2) && canReachLightWorldBunny() ? 'available' : 'unavailable';
+					return (items.mirror || (items.glove === 2 && items.moonpearl)) && canReachLightWorldBunny() ? 'available' : 'unavailable';
 				}
 			}, { // [29]
 				caption: 'Fugitive under the bridge {flippers}',
@@ -1709,9 +1726,9 @@
 				caption: 'Catfish',
 				is_opened: false,
 				is_available: function() {
-					if(!items.glove)
-						return 'unavailable';
-					if(canReachPyramid())
+					if(canReachPyramid() && items.glove)
+						return 'available';
+					if(canReachLightWorld() && items.mirror)
 						return 'available';
 					return 'unavailable';
 				}
@@ -1876,7 +1893,7 @@
 					var doorcheck = window.doorCheck(11,false,false,true,['glove','killbomb','bombdash'],'item');
 					if(doorcheck)
 						return items.moonpearl ? doorcheck : 'unavailable';
-					return canReachLightWorldBunny() && (items.bomb || items.boots) ? (items.glove && items.moonpearl ? 'available' : (items.mirror ? 'possible' : 'unavailable')) : 'unavailable';
+					return canReachLightWorldBunny() && (items.bomb || items.boots) ? ((items.glove || items.smallkeyhalf0 > 0) && items.moonpearl ? 'available' : (items.mirror ? 'possible' : 'unavailable')) : 'unavailable';
 				}
 			}, { // [56]
 				caption: "Castle Secret Entrance (Uncle + 1)",
@@ -1911,7 +1928,7 @@
 				caption: 'Take the frog home',
 				is_opened: false,
 				is_available: function() {
-					return (items.mirror || items.glove === 2) && canReachLightWorldBunny() ? 'available' : 'unavailable';
+					return (items.mirror || (items.glove === 2 && items.moonpearl)) && canReachLightWorldBunny() ? 'available' : 'unavailable';
 				}
 			}, { // [61]
 				caption: 'Fat Fairy: Buy OJ bomb from Light Link\'s House after {crystal}5 {crystal}6 (2 items)',
@@ -2319,7 +2336,7 @@
 					return window.GTBoss();
 				},
 				can_get_chest: function() {
-					if (items.glove < 2 || !items.hammer || (!items.hookshot && !items.mirror) || !canReachDarkWorld()) return 'unavailable';
+					if (items.glove < 2 || (!items.hookshot && !items.mirror) || !canReachDarkWorld()) return 'unavailable';
 					if (flags.opentowercount == 8) {
 						return (items.lantern || items.flute) ? 'possible' : 'darkpossible';
 					}
