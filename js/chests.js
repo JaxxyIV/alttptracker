@@ -1652,6 +1652,7 @@
 				caption: 'Hookshot Cave (bottom chest) {hookshot}/{boots}',
 				is_opened: false,
 				is_available: function() {
+					if (items.glove === 0 && !activeFlute()) return 'unavailable';
 					return (items.boots || items.hookshot) && (items.glove || (items.mirror && (items.moonpearl || items.glove === 2))) ?
 						(items.lantern || activeFlute() ? 'available' : 'darkavailable') :
 						'unavailable';
@@ -1660,6 +1661,7 @@
 				caption: 'Hookshot Cave (3 top chests) {hookshot}',
 				is_opened: false,
 				is_available: function() {
+					if (items.glove === 0 && !activeFlute()) return 'unavailable';
 					return items.hookshot && (items.glove || (items.mirror && (items.moonpearl || items.glove === 2))) ?
 						(items.lantern || activeFlute() ? 'available' : 'darkavailable') :
 						'unavailable';
@@ -1698,7 +1700,7 @@
 				caption: 'Gary\'s Lunchbox (save the frog first)',
 				is_opened: false,
 				is_available: function() {
-					return (items.mirror || (items.glove === 2 && items.moonpearl)) && canReachLightWorldBunny() ? 'available' : 'unavailable';
+					return (items.mirror || (items.glove === 2 && (items.moonpearl || items.agahnim))) && canReachLightWorldBunny() ? 'available' : 'unavailable';
 				}
 			}, { // [29]
 				caption: 'Fugitive under the bridge {flippers}',
@@ -1928,7 +1930,7 @@
 				caption: 'Take the frog home',
 				is_opened: false,
 				is_available: function() {
-					return (items.mirror || (items.glove === 2 && items.moonpearl)) && canReachLightWorldBunny() ? 'available' : 'unavailable';
+					return (items.mirror || (items.glove === 2 && (items.moonpearl || items.agahnim))) && canReachLightWorldBunny() ? 'available' : 'unavailable';
 				}
 			}, { // [61]
 				caption: 'Fat Fairy: Buy OJ bomb from Light Link\'s House after {crystal}5 {crystal}6 (2 items)',

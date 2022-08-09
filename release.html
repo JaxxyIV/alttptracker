@@ -1,15 +1,15 @@
 <html>
 	<head>
 		<title>ALTTP Randomizer Community Tracker - Release Notes</title>
-		<script type="text/javascript" src="js/index.js?v=20005"></script>
-		<script type="text/javascript" src="js/jquery-3.3.1.js?v=20005"></script>
-		<script type="text/javascript" src="js/jquery.powertip.js?v=20005"></script>
-		<script type="text/javascript" src="js/bootstrap.min.js?v=20005"></script>
-		<link href="css/jquery.powertip.css?v=20005" rel="stylesheet" />
-		<link href="css/launcher.css?v=20005" rel="stylesheet">
-		<link href="css/fonts.css?v=20005" rel="stylesheet">
-		<link href="css/sprites.css?v=20005" rel="stylesheet">
-		<link href="css/toast.css?v=20005" rel="stylesheet">
+		<script type="text/javascript" src="js/index.js?v=20014"></script>
+		<script type="text/javascript" src="js/jquery-3.3.1.js?v=20014"></script>
+		<script type="text/javascript" src="js/jquery.powertip.js?v=20014"></script>
+		<script type="text/javascript" src="js/bootstrap.min.js?v=20014"></script>
+		<link href="css/jquery.powertip.css?v=20014" rel="stylesheet" />
+		<link href="css/launcher.css?v=20014" rel="stylesheet">
+		<link href="css/fonts.css?v=20014" rel="stylesheet">
+		<link href="css/sprites.css?v=20014" rel="stylesheet">
+		<link href="css/toast.css?v=20014" rel="stylesheet">
 		<!-- Global site tag (gtag.js) - Google Analytics -->
 		<script async src="https://www.googletagmanager.com/gtag/js?id=G-Z3T0KM2W1L"></script>
 		<script>
@@ -38,7 +38,7 @@
 				<div class="header-main-div">
 					<a href="./index.html"><img src="./images/overlay/header.png" class="header-main-img"></a>
 					<div class="header-news-div" >
-						<span class="default-white-text">Build 2.0.005 051722 - Compatible for v31.x.x<br>Report any issues to Dunka (Discord: BigDunka#8354)<br>Check Known Issues for current known outstanding issues</span>
+						<span class="default-white-text">Build 2.0.014 073122 - Compatible for v31.x.x<br>Report any issues to Dunka (Discord: BigDunka#8354)<br>Check Known Issues for current known outstanding issues</span>
 					</div>
 				</div>
 				<div class="header-links">
@@ -63,6 +63,77 @@
 				<div class="preset-div">
 					<span id="gameplayarrow"></span> Release 2.0
 					<div id="release20">
+						<b><i>7/31/2022 Build 2.0.014 073122</i></b><br>
+						<ul>
+							<u>Interface Changes</u><br>
+							<li>Updates and fixes for restreaming mode</li>
+						</ul>
+						<b><i>7/30/2022 Build 2.0.013 073022</i></b><br>
+						<ul>
+							<u>Interface Changes</u><br>
+							<li>Fix for spoiler mode, where the spoiler select screen wasn't displaying properly</li>
+							<li>Fix for a few sprites with images not showing up properly</li>
+							<li>Updated button presets for ALTTPR Ladder Season Fourteen Modes (<a href="https://alttprladder.com" target="_blank">https://alttprladder.com</a>)</li>
+						</ul>
+						<b><i>7/15/2022 Build 2.0.012 071522</i></b><br>
+						<ul>
+							<u>Logic Changes</u><br>
+							<li>Fixed logical access to EDM from WDDM, Mirror, and Hammer</li>
+							<li>Fixed entrance chest tracking ToH showing boss as dark available instead of just available</li>
+							<u>Interface Changes</u><br>
+							<li>Added boss availability to each dungeon in entrance as a color coded box over the boss image</li>
+							<li>Changed some of the names of entrance locations as to not confuse duplicate locations in the entrance summary page</li>
+						</ul>
+						<b><i>7/11/2022 Build 2.0.011 071122</i></b><br>
+						<ul>
+							<u>Logic Changes</u><br>
+							<li>Added chest availability logic to confirm both SP and Dam located in order to enter SP</li>
+							<li>Added chest availability logic to confirm Wizrobes can be killed to advance in MM</li>
+						</ul>
+						<b><i>7/4/2022 Build 2.0.010 070422</i></b><br>
+						<ul>
+							Thanks to Catobat for the following changes:<br>							
+							<u>Logic Changes</u><br>
+							<li>Fixed bug with Skull Woods boss logic</li>
+							<li>Fixed general bugs with multi-entrance dungeons</li>
+							<li>Improved Hyrule Castle logic; Reaching the back without lamp</li>
+							<li>Added bunny logic; Chests are red if the dungeon can only be entered as a bunny, with exceptions in Door Shuffle</li>
+							<li>Fixed bug with Sanctuary on Pyramid or Castle</li>
+							<u>Interface Changes</u><br>
+							<li>Entrance chest colors now work with all Door Shuffle modes</li>
+							<li>Fixed minor visual bug with Hyrule Castle in Door Shuffle modes</li>
+							<li>Fixed minor visual bug with Hyrule Castle Hole in Inverted Entrance</li>
+							<li>Disabled chest colors in Overworld Shuffle logic (not fully implemented yet)</li>
+						</ul>
+						<b><i>6/30/2022 Build 2.0.009 063022</i></b><br>
+						<ul>
+							<u>Logic Changes</u><br>
+							<li>Numerous inverted fixes</li>
+							<li>Yeah, not gonna name them all, there were several</li>
+						</ul>
+						<b><i>6/23/2022 Build 2.0.008 062322</i></b><br>
+						<ul>
+							<u>Logic Changes</u><br>
+							<li>Fixed the Sanc start chest availability in inverted entrance</li>
+							<li>Fixed logic issue with first chest in Hookshot Cave with dark availability</li>
+							<li>Fixed inverted logic issue with turning in the Smithy and Purple Chest without Moon Pearl, but getting LW access from Aga 1</li>
+							<li>Fixed logic issue for Fairy Ascension cave entrance with lower DDM access, Moon Pearl, and Mirror</li>
+						</ul>
+						<b><i>6/19/2022 Build 2.0.007 061922</i></b><br>
+						<ul>
+							<u>Interface Changes</u><br>
+							<li>Added entrance chest availability tracking! Instead of having the color coding over the dungeon, like in non-entrance modes, it shows up over the chests</li>
+							NOTE: We do know of a few bugs, like TR tracking, and those have be noted in the known issues list, and will be fixed at a later date
+						</ul>
+						<b><i>6/10/2022 Build 2.0.006 061022</i></b><br>
+						<ul>
+							<u>Interface Changes</u><br>
+							<li>Added map and compass tracking to autotracking if wild maps and/or compasses are set to true and they have not been manually set</li>
+							<u>Logic Changes</u><br>
+							<li>Fixed inverted Bottom EDDM checks from Paradox middle cave being available</li>
+							<li>Fixed inverted entrance check for Ganon's Tower entrance with crystal count check</li>
+							<li>Fixed inverted check for Hookshot Cave showing active without DM access</li>
+						</ul>
 						<b><i>5/17/2022 Build 2.0.005 051722</i></b><br>
 						<ul>
 							<u>Interface Changes</u><br>

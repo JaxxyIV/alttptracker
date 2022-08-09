@@ -88,6 +88,38 @@
 		return items.moonpearl && (items.glove === 2 || items.glove && items.hammer || items.agahnim && items.hookshot && (items.hammer || items.glove || items.flippers));
 	}
 	
+	function canReachOutcastEntrance() {
+		if (items.moonpearl && (items.glove === 2 || items.glove && items.hammer || items.agahnim && items.hookshot && (items.hammer || items.glove || items.flippers))) return true;
+		if (hasFoundEntrance(90) || hasFoundEntrance(91) || (flags.doorshuffle === 'N' && hasFoundEntrance(96)) || hasFoundEntrance(99) || hasFoundEntrance(102) || hasFoundEntrance(104) || hasFoundEntrance(105) || hasFoundEntrance(106) || hasFoundEntrance(107) || hasFoundEntrance(108) || hasFoundEntrance(109) || (hasFoundEntrance(110) && items.moonpearl && items.hammer) || hasFoundEntrance(111) || (hasFoundEntrance(112) && items.moonpearl && items.glove === 2) || hasFoundEntrance(129)) return true;
+		if ((hasFoundEntrance(86) || hasFoundEntrance(87) || hasFoundEntrance(88) || hasFoundEntrance(89) || hasFoundEntrance(113) || hasFoundEntrance(119)) && items.moonpearl && (items.glove === 2 || (items.flippers && items.hookshot) || (items.glove > 0 && items.hammer && items.hookshot))) return true;
+		if (canReachDarkWorldEast() && items.moonpearl && ((items.flippers || items.hammer || items.glove > 0) && items.hookshot)) return true;
+		if (hasFoundEntrance(92) && items.moonpearl && items.hookshot) return true;
+		return false;
+	}
+	
+	function canReachDarkWorldEast() {
+		if (canReachDarkWorld() && (items.hammer || items.flippers)) return true;
+		if (items.agahnim || hasFoundEntrance(94) || hasFoundEntrance(95) || hasFoundEntrance(114) || hasFoundEntrance(115) || hasFoundEntrance(116) || hasFoundEntrance(117) || ((hasFoundEntrance(86) || hasFoundEntrance(87) || hasFoundEntrance(88) || hasFoundEntrance(89) || hasFoundEntrance(113) || hasFoundEntrance(119)) && (items.hammer || items.flippers) && items.moonpearl) || (hasFoundEntrance(92) && items.moonpearl && (items.glove > 0 || items.hammer))) return true;
+		if ((hasFoundEntrance(90) || hasFoundEntrance(91) || (flags.doorshuffle === 'N' && hasFoundEntrance(96)) || hasFoundEntrance(99) || hasFoundEntrance(102) || hasFoundEntrance(104) || hasFoundEntrance(105) || hasFoundEntrance(106) || hasFoundEntrance(107) || hasFoundEntrance(108) || hasFoundEntrance(109) || (hasFoundEntrance(110) && items.hammer) || hasFoundEntrance(111) || hasFoundEntrance(129)) && items.moonpearl && (items.flippers || items.hammer)) return true;
+		if (canReachAndLeaveShoppingMall()) return true;
+		return false;
+	}
+	
+	function canReachDarkWorld()
+	{
+		return items.moonpearl && (items.glove === 2 || items.glove && items.hammer || items.agahnim);
+	}	
+	
+	function canReachAndLeaveShoppingMall()
+	{
+		if ((hasFoundEntrance(120) || hasFoundEntrance(121) || hasFoundEntrance(122)) && items.moonpearl && items.flippers) return true;
+		return false;
+	}
+	
+	function hasFoundEntrance(x) {
+		return (entrances[x].is_connector || entrances[x].known_location != '') ? true : false;
+	}	
+	
 	function canReachOtherWorld() //Can get from light => dark, or dark => light
 	{
 		return items.moonpearl && (items.glove === 2 || items.glove && items.hammer || items.agahnim);
@@ -382,7 +414,8 @@
 				dungeonEntrances[k] = "unavailable";
 			if(dungeonEntrances[k] !== "unavailable")
 			{
-				state = dungeonEntrances[k];
+				if(state !== "available")
+					state = dungeonEntrances[k];
 				if(!dungeonEntrancesBunny[k])
 					bunny = false;
 			}
@@ -478,11 +511,12 @@
 		var state = "unavailable",bunny = true,allAccessible = true;
 		for(var k = 0; k < dungeonEntranceCounts[dungeonID]; k++)
 		{
+			if(flags.doorshuffle === 'N' && dungeonEntrancesBunny[k])
+				dungeonEntrances[k] = "unavailable";
 			if(dungeonEntrances[k] !== "unavailable")
 			{
-				if(flags.doorshuffle === 'N' && dungeonEntrancesBunny[k])
-					dungeonEntrances[k] = "unavailable";
-				state = dungeonEntrances[k];
+				if(state !== "available")
+					state = dungeonEntrances[k];
 				if(!dungeonEntrancesBunny[k])
 					bunny = false;
 			}
@@ -581,6 +615,146 @@
 		return state;
 	};
 
+    window.entranceInDarkWorld = function(n) {
+		return n == 93 || n == 95 ? flags.gametype != 'I' : n >= 86;
+	};
+
+    window.entranceInBunnyWorld = function(n) {
+		return n == 93 || n == 95 || (n >= 86) == (flags.gametype != 'I');
+	};
+
+    window.entranceChests = function(entranceNames,dungeonID) {
+		if (items['chest'+dungeonID] > 0) {
+			var entranceAvail = [];
+			var entranceBunny = [];
+			var found = false;
+			nextEntrance:
+			for (var i = 0; i < entranceNames.length; i++) {
+				for (var j = 0; j < entrances.length; j++) {
+					if (entrances[j].known_location === entranceNames[i]) {
+						entranceAvail.push('available');
+						entranceBunny.push(!items.moonpearl && entranceInBunnyWorld(j));
+						found = true;
+						continue nextEntrance;
+					}
+				}
+				//special cases
+				if (entranceNames[i] == 'placeholder' && dungeonID == 5 && canReachOutcastEntrance()) {
+					entranceAvail.push('available');
+					entranceBunny.push(!items.moonpearl && entranceInBunnyWorld(102));
+					found = true;
+					continue nextEntrance;
+				}
+				if (entranceNames[i] == 'placeholder' && dungeonID == 11 && i == 3) {
+					entranceAvail.push(flags.gametype != 'I' && (flags.gametype == 'S' || flags.doorshuffle == 'N') ? 'available' : 'possible');
+					entranceBunny.push(false);
+					found = true;
+					continue nextEntrance;
+				}
+				if (entranceNames[i] == 'placeholder' && dungeonID == 11 && i == 4 && (((entrances[22].known_location === 'sanc' || entrances[29].known_location === 'sanc' || entrances[18].known_location === 'sanc' || entrances[11].known_location === 'sanc')) || ((entrances[24].known_location === 'sanc' && items.boots && items.agahnim) || (entrances[13].known_location === 'sanc' && items.glove > 0 && (flags.gametype != 'I' || (items.moonpearl && canReachOutcastEntrance())) || entrances[43].known_location === 'sanc' && items.hammer || entrances[95].known_location === 'sanc' && items.agahnim2)))) {
+					entranceAvail.push('available');
+					var bunny = false;
+					for (var j = 0; j < entrances.length; j++) {
+						if (entrances[j].known_location === 'sanc') {
+							bunny = !items.moonpearl && entranceInBunnyWorld(j);
+							break;
+						}
+					}
+					entranceBunny.push(bunny);
+					found = true;
+					continue nextEntrance;
+				}
+				//not found
+				entranceAvail.push('unavailable');
+				entranceBunny.push(false);
+			}
+	
+			if (found) {
+				var c = dungeonChests(dungeonID,entranceAvail,entranceBunny);
+				if (dungeonID < 10) {
+					document.getElementById('entranceBoss'+dungeonID).style.visibility = (!dungeons[dungeonID].is_beaten ? 'visible' : 'hidden');
+					
+					switch (dungeonID) {
+						case 0:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? EPBoss() : 'unavailable');
+							break;
+						case 1:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(DPBoss('unavailable', (hasFoundLocation('dp_n') && !entranceBunny[3] ? 'available' : 'unavailable')));
+							break;
+						case 2:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? HeraBoss() : 'unavailable');
+							break;
+						case 3:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? PoDBoss() : 'unavailable');
+							break;
+						case 4:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? SPBoss() : 'unavailable');
+							break;
+						case 5:
+							if (!hasFoundLocation('sw')) document.getElementById('entranceBoss'+dungeonID).style.visibility = 'hidden';
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(SWBoss('unavailable', (hasFoundLocation('sw') && !entranceBunny[0] ? 'available' : 'unavailable')));
+							break;
+						case 6:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? TTBoss() : 'unavailable');
+							break;
+						case 7:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? IPBoss() : 'unavailable');
+							break;
+						case 8:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? MMBoss() : 'unavailable');
+							break;
+						case 9:
+							document.getElementById('entranceBoss'+dungeonID).style.background = ConvertBossToColor(!entranceBunny[0] ? TRBoss() : 'unavailable');
+							break;
+					}
+				}
+				if (c === 'available') {
+					document.getElementById('chest'+dungeonID).style.backgroundColor = 'lime';
+					document.getElementById('chest'+dungeonID).style.color = 'black';
+				} else if (c === 'darkavailable') {
+					document.getElementById('chest'+dungeonID).style.backgroundColor = 'blue';
+					document.getElementById('chest'+dungeonID).style.color = 'white';
+				} else if (c === 'possible') {
+					document.getElementById('chest'+dungeonID).style.backgroundColor = 'yellow';
+					document.getElementById('chest'+dungeonID).style.color = 'black';
+				} else if (c === 'darkpossible') {
+					document.getElementById('chest'+dungeonID).style.backgroundColor = 'purple';
+					document.getElementById('chest'+dungeonID).style.color = 'white';
+				} else if (c === 'unavailable') {
+					document.getElementById('chest'+dungeonID).style.backgroundColor = 'red';
+					document.getElementById('chest'+dungeonID).style.color = 'white';
+				} else if (c === 'information') {
+					document.getElementById('chest'+dungeonID).style.backgroundColor = 'orange';
+					document.getElementById('chest'+dungeonID).style.color = 'black';
+				}
+			} else {
+				if (dungeonID < 10) {
+					document.getElementById('entranceBoss'+dungeonID).style.visibility = 'hidden';
+				}
+				document.getElementById('chest'+dungeonID).style.backgroundColor = 'white';
+				document.getElementById('chest'+dungeonID).style.color = 'black';
+			}
+		} else {
+			if (dungeonID < 10) {
+				document.getElementById('entranceBoss'+dungeonID).style.visibility = 'hidden';
+			}
+		}
+	};
+	
+	window.ConvertBossToColor = function(availability) {
+		if (availability === 'available') {
+			return 'lime';
+		} else if (availability === 'possible') {
+			return 'yellow';
+		} else if (availability === 'darkavailable') {
+			return 'blue';
+		} else if (availability === 'darkpossible') {
+			return 'purple';
+		} else {
+			return 'red';
+		}
+	}
+
     window.EPBoss = function() {
 		var dungeoncheck = enemizer_check(0);
 		//Standard check
@@ -619,7 +793,22 @@
     window.HeraBoss = function() {
 		var dungeoncheck = enemizer_check(2);
 		if (!items.bigkey2 || dungeoncheck === 'unavailable') return 'unavailable';
-		if (flags.wildbigkeys) return (dungeoncheck === 'available' ? ((!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkavailable' : 'available') : ((!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkpossible' : 'possible')); 
+		if (flags.wildbigkeys) {
+			if (dungeoncheck === 'available') {
+				if (flags.entrancemode === 'N' && flags.overworldshuffle === 'N') {
+					return (!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkavailable' : 'available';
+				} else {
+					return 'available';
+					
+				}
+			} else {
+				if (flags.entrancemode === 'N' && flags.overworldshuffle === 'N') {
+					return (!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkpossible' : 'possible';
+				} else {
+					return 'possible';
+				}				
+			}
+		}	
 		if ((flags.wildkeys && (items.smallkey2 === 0 && flags.gametype != 'R')) || (!items.lantern && !items.firerod)) return (!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkpossible' : 'possible';
 		return (dungeoncheck === 'available' ? ((!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkavailable' : 'available') : ((!items.flute && !items.lantern && !(flags.glitches != 'N' && items.boots)) ? 'darkpossible' : 'possible'));
     };
@@ -648,6 +837,7 @@
 
 	//front and back can be 'available', 'possible' or 'unavailable', at most one can be 'unavailable'
     window.SWBoss = function(front = 'available',back = 'unavailable') {
+		if (!items.firerod) return 'unavailable';
 		if (front != back && flags.entrancemode === 'N' && (items.firerod || front === 'unavailable')) {
 			if (front === 'available' || back === 'available') front = back = 'available';
 			else front = back = 'possible';
@@ -1293,6 +1483,10 @@
     };
 
     window.SPChests = function() {
+		if (flags.entrancemode != 'N') {
+			if (!hasFoundLocation('dam')) return 'unavailable';
+		}
+		
 		if (!items.flippers || (!items.mirror && flags.entrancemode === 'N')) return 'unavailable';
 		var chests = ['U','U','U','U','U','U','U','U','U','U'];
 		
@@ -1386,7 +1580,7 @@
 				if (flags.wildbigkeys) {
 					chests[4] = (items.bigkey5) ? 'A' : 'U';
 				} else {
-					if (back === 'available' && (front === 'available' || flags.gametype === 'R' || (flags.wildkeys && items.smallkey5)) && (items.sword > 0 || flags.swordmode === 'S') && dungeoncheck === 'available') {
+					if (back === 'available' && (front === 'available' || flags.gametype === 'R' || (flags.wildkeys && items.smallkey5)) && (items.sword > 0 || flags.swordmode === 'S') && items.firerod && dungeoncheck === 'available') {
 						chests[4] = 'K'; //If is full clearable, set to a key, else possible
 					} else {
 						chests[4] = 'P';
@@ -1522,6 +1716,7 @@
 
     window.MMChests = function(medcheck) {
 		if (!items.boots && !items.hookshot) return 'unavailable';
+		if (!melee_bow() && !rod() && !cane()) return 'unavailable';
 		if (medcheck === 'unavailable') return 'unavailable';
 		if (medcheck === 'possible') return 'possible';
 
@@ -2847,7 +3042,7 @@
 			weapon = true;
 		}
 		//Walk from front to back
-		if (front != 'unavailable' && back != 'available' && items.lantern && (weapon || items.icerod)) {//Could consider dark room navigation
+		if (front != 'unavailable' && back != 'available' && items.lantern && (weapon || items.icerod || flags.gametype === 'R')) {//Could consider dark room navigation
 			if (flags.gametype === 'R') {
 				back = front;
 			} else {
@@ -2902,6 +3097,15 @@
 		if (sanc != 'unavailable') {
 			chests[7] = sanc === 'available' ? 'A' : 'P';
 		}
+		//Dark room navigation
+		if (front != 'unavailable' && back === 'unavailable' && (weapon || items.icerod || flags.gametype === 'R') && (flags.gametype === 'R' || !flags.wildkeys || items.smallkeyhalf0) && (items.bomb || items.boots)) {
+			chests[4] = front === 'available' && (flags.gametype === 'R' || (flags.wildkeys && items.smallkeyhalf0)) ? 'DA' : 'DP';
+			chests[5] = front === 'available' && (flags.gametype === 'R' || (flags.wildkeys && items.smallkeyhalf0)) ? 'DA' : 'DP';
+			chests[6] = front === 'available' && (flags.gametype === 'R' || (flags.wildkeys && items.smallkeyhalf0)) ? 'DA' : 'DP';
+		}
+		if (front != 'unavailable' && sanc === 'unavailable' && (weapon || items.icerod || flags.gametype === 'R') && (flags.gametype === 'R' || !flags.wildkeys || items.smallkeyhalf0)) {
+			chests[7] = front === 'available' && (flags.gametype === 'R' || (flags.wildkeys && items.smallkeyhalf0)) ? 'DA' : 'DP';
+		}
 		if (!flags.wildkeys && flags.gametype != 'R') {
 			if (flags.gametype === 'S') {
 				chests[0] = 'K';
@@ -2937,5 +3141,14 @@
 
 		return available_chests(12, chests, items.maxchest12, items.chest12);
 	};
-		
+
+	function hasFoundLocation(x) {
+		for (var i = 0; i < entrances.length; i++) {
+			if (entrances[i].known_location === x) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 }(window));
