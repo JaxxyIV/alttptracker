@@ -38,12 +38,13 @@
 		return true;
 	}
 	
+	function anybottle() { return items.bottle1 > 0 || items.bottle2 > 0 || items.bottle3 > 0 || items.bottle4 > 0}
     function melee() { return items.sword || items.hammer; }
     function melee_bow() { return melee() || items.bow > 1; }
     function cane() { return items.somaria || items.byrna; }
     function rod() { return items.firerod || items.icerod; }
     function canHitSwitch() { return items.bomb || melee_bow() || cane() || rod() || items.boomerang || items.hookshot; }
-    function agatowerweapon() { return items.sword > 0 || items.somaria || items.bow > 1 || items.hammer || items.firerod || (items.byrna && (items.bottle > 0 || items.magic)); }
+    function agatowerweapon() { return items.sword > 0 || items.somaria || items.bow > 1 || items.hammer || items.firerod || (items.byrna && (anybottle() || items.magic)); }
     function always() { return 'available'; }
 
 	function can_reach_outcast() {
@@ -273,7 +274,7 @@
 				is_available: function() {
 					if (items.sword < 2 && (flags.swordmode != 'S' || !items.hammer) && !items.cape) return 'unavailable';
 					if (!items.sword && !items.hammer && !items.net) return 'unavailable';
-					return (items.sword >= 2 || (items.cape && items.sword) || (flags.swordmode === 'S' && (items.hammer || (items.cape && items.net)))) && (items.smallkeyhalf1 === 2 || flags.gametype == 'R') && agatowerweapon() ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
+					return (items.sword >= 2 || (items.cape && items.sword) || (flags.swordmode === 'S' && (items.hammer || (items.cape && items.net)))) && (items.smallkeyhalf1 > 1 || flags.gametype == 'R') && agatowerweapon() ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
 				}
 			};
 
@@ -353,7 +354,7 @@
 				caption: 'Byrna Spike Cave',
 				is_opened: false,
 				is_available: function() {
-					return canReachWDM() && items.moonpearl && items.glove && items.hammer && (items.byrna || (items.cape && (items.bottle || items.magic))) ?
+					return canReachWDM() && items.moonpearl && items.glove && items.hammer && (items.byrna || (items.cape && (anybottle() || items.magic))) ?
 						items.lantern || items.flute || items.boots ? 'available' : 'darkavailable' :
 						'unavailable';
 				}
@@ -439,7 +440,7 @@
 				caption: 'Lazy Drunk Kid: Distract him with {bottle} because he can\'t lay off the sauce!',
 				is_opened: false,
 				is_available: function() {
-					return items.bottle ? 'available' : 'unavailable';
+					return anybottle() ? 'available' : 'unavailable';
 				}
 			}, { // [28]
 				caption: 'Gary\'s Lunchbox (save the frog first)',
@@ -621,7 +622,7 @@
 					if (flags.gametype === 'S') return 'available';
 					if (flags.wildkeys || flags.gametype == 'R') {
 						if (items.glove) return 'available';
-						if (items.smallkeyhalf0 === 1 || flags.gametype == 'R') return canDoTorchDarkRooms() ? 'available' : 'darkavailable';
+						if (items.smallkeyhalf0 > 0 || flags.gametype == 'R') return canDoTorchDarkRooms() ? 'available' : 'darkavailable';
 						return 'unavailable';
 					}
 					
@@ -1498,7 +1499,7 @@
 					{
 						if(!melee_bow() && !cane() && !items.firerod)
 							return 'unavailable';
-						return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 === 2 || flags.gametype === 'R') ? (items.lantern ? 'available' : 'darkavailable') : 'unavailable';
+						return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 > 1 || flags.gametype === 'R') ? (items.lantern ? 'available' : 'darkavailable') : 'unavailable';
 					}
 					if(flags.doorshuffle === 'C')
 					{
@@ -1507,7 +1508,7 @@
 						return window.doorCheck(12,!items.lantern && !activeFlute(),true,true,[],'boss');
 					}
 					if (flags.wildkeys) {
-						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 1))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) && (items.smallkeyhalf1 === 2 || flags.gametype == 'R') ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
+						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 1))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) && (items.smallkeyhalf1 > 1 || flags.gametype == 'R') ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
 					} else {
 						return (items.sword || items.hammer || (items.net && (items.somaria || items.byrna || items.firerod || items.bow > 1))) && (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net))) && (activeFlute() || items.glove) ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';					
 					}
@@ -1599,7 +1600,7 @@
 				caption: 'Byrna Spike Cave',
 				is_opened: false,
 				is_available: function() {
-					return items.glove && items.hammer && (items.byrna || (items.cape && (items.bottle || items.magic))) ?
+					return items.glove && items.hammer && (items.byrna || (items.cape && (anybottle() || items.magic))) ?
 						items.lantern || activeFlute() ? 'available' : 'darkavailable' :
 						'unavailable';
 				}
@@ -1694,7 +1695,7 @@
 				caption: 'Lazy Drunk Kid: Distract him with {bottle} because he can\'t lay off the sauce!',
 				is_opened: false,
 				is_available: function() {
-					return canReachLightWorldBunny() && items.bottle ? 'available' : 'unavailable';
+					return canReachLightWorldBunny() && anybottle() ? 'available' : 'unavailable';
 				}
 			}, { // [28]
 				caption: 'Gary\'s Lunchbox (save the frog first)',
@@ -1899,7 +1900,7 @@
 					if (flags.wildkeys) {
 						if (items.glove) return 'available';
 						if (items.bomb || melee_bow() || items.firerod || cane()) {
-							if (items.smallkeyhalf0 === 1) return canDoTorchDarkRooms() ? 'available' : 'darkavailable';
+							if (items.smallkeyhalf0 > 0) return canDoTorchDarkRooms() ? 'available' : 'darkavailable';
 						}
 						return 'unavailable';
 					}
@@ -2394,8 +2395,8 @@
 						if(!melee_bow() && !cane() && !items.firerod)
 							return 'unavailable';
 						if(items.mirror && (items.agahnim || (items.glove && items.hammer && items.moonpearl) || (items.glove === 2 && items.moonpearl && items.flippers)))
-							return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 === 2 || flags.gametype === 'R') ? (items.lantern ? 'available' : 'darkavailable') : 'unavailable';
-						return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 === 2 || flags.gametype === 'R') ? (items.lantern ? 'possible' : 'darkpossible') : 'unavailable';
+							return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 > 1 || flags.gametype === 'R') ? (items.lantern ? 'available' : 'darkavailable') : 'unavailable';
+						return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 > 1 || flags.gametype === 'R') ? (items.lantern ? 'possible' : 'darkpossible') : 'unavailable';
 					}
 					if(flags.doorshuffle === 'C')
 					{
@@ -2411,7 +2412,7 @@
 					//	return (items.sword || (flags.swordmode === 'S' && (items.hammer || items.net)/* && agatowerweapon()*/)) && (items.smallkeyhalf1 === 2 || flags.gametype === 'R') ? (items.lantern ? doorcheck : 'dark'+doorcheck) : 'unavailable';
 					//}
 					if (flags.wildkeys) {
-						return (items.sword >= 2 || (items.cape && items.sword) || (flags.swordmode === 'S' && (items.hammer || (items.cape && items.net)))) && (items.smallkeyhalf1 === 2 || flags.gametype == 'R') && agatowerweapon() ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
+						return (items.sword >= 2 || (items.cape && items.sword) || (flags.swordmode === 'S' && (items.hammer || (items.cape && items.net)))) && (items.smallkeyhalf1 > 1 || flags.gametype == 'R') && agatowerweapon() ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
 					} else {
 						return ((items.sword >= 2 || (items.cape && items.sword) || (flags.swordmode === 'S' && (items.hammer || (items.cape && items.net)))) && agatowerweapon()) ? items.lantern ? 'available' : 'darkavailable' : 'unavailable';
 					}
@@ -2513,7 +2514,7 @@
 				caption: 'Byrna Spike Cave',
 				is_opened: false,
 				is_available: function() {
-					return items.moonpearl && items.glove && items.hammer && (items.byrna || (items.cape && (items.bottle || items.magic))) ?
+					return items.moonpearl && items.glove && items.hammer && (items.byrna || (items.cape && (anybottle() || items.magic))) ?
 						items.lantern || items.flute ? 'available' : 'darkavailable' :
 						'unavailable';
 				}
@@ -2607,7 +2608,7 @@
 				caption: 'Lazy Drunk Kid: Distract him with {bottle} because he can\'t lay off the sauce!',
 				is_opened: false,
 				is_available: function() {
-					return items.bottle ? 'available' : 'unavailable';
+					return anybottle() ? 'available' : 'unavailable';
 				}
 			}, { // [28]
 				caption: 'Gary\'s Lunchbox (save the frog first)',
@@ -2816,7 +2817,7 @@
 					if (flags.wildkeys || flags.gametype == 'R') {
 						if (items.glove) return 'available';
 						if (items.bomb || melee_bow() || items.firerod || cane()) {
-							if (items.smallkeyhalf0 === 1 || flags.gametype == 'R') return canDoTorchDarkRooms() ? 'available' : 'darkavailable';
+							if (items.smallkeyhalf0 > 0 || flags.gametype == 'R') return canDoTorchDarkRooms() ? 'available' : 'darkavailable';
 						}
 						return 'unavailable';
 					}
